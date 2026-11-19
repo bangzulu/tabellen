@@ -76,7 +76,8 @@ tests/              syntetiska tester: python -m pytest
       SL:s båtlinjer (route_type 1000) har krockande nummer (10, 13, 21 …) och filtreras bort.
 - [x] `trip_short_name` är tomt för SL. Tågnumret tas från `samtrafiken_internal_trip_number`.
 - [ ] Jämför avvikelse mot kitt vid samma tidpunkt för några tågnummer.
-- [ ] `direction_id` 0 = norrgående för pendeltåg, medan kitts Riktning 1 är södergående. Bestäm etiketter.
+- [x] Gruppering sker på `direction_id` (0 → Riktning 1, 1 → Riktning 2) utan tolkning av norr/söder.
+      Matchar inte nödvändigtvis kitts numrering, och det är medvetet.
 - [ ] Nockebybanan (linje 12) finns i datan men inte i kitt. Lägg till som egen flik?
 
 ## Idéer från intervjuerna med trafikinformatörerna
