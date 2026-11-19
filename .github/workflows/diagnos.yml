@@ -1,0 +1,27 @@
+name: Diagnos
+on:
+  workflow_dispatch:
+  push:
+    paths: [".github/workflows/diagnos.yml"]
+jobs:
+  diagnos:
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: DNS och HTTP
+        run: |
+          H=tabellen.fly.dev
+          for ns in 8.8.8.8 1.1.1.1; do
+            echo "::notice title=DNS $ns::A=$(dig +short A $H @$ns | tr '\n' ' ') AAAA=$(dig +short AAAA $H @$ns | tr '\n' ' ')"
+          done
+          for p in / /api/health "/api/board?tab=PT"; do
+            out=$(curl -sS --max-time 40 -o body.txt -w "%{http_code} %{time_total}s" "https://$H$p" 2>&1)
+            echo "::notice title=HTTP $p::$out $(head -c 160 body.txt | tr '\n' ' ')"
+          done
+      - name: Fly-status
+        run: |
+          echo "::notice title=IPs::$(flyctl ips list -a tabellen 2>&1 | tr '\n' ' ' | head -c 500)"
+          echo "::notice title=Status::$(flyctl status -a tabellen 2>&1 | tr '\n' ' ' | head -c 600)"
