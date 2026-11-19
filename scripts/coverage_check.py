@@ -26,7 +26,7 @@ def list_routes(static) -> None:
     print(f"{'linje':<6} {'route_type':<10} {'i TABS':<8} namn")
     for r in sorted(static.routes, key=lambda r: (int(r.get('route_type') or 0), r.get('route_short_name', ''))):
         rtype = int(r.get("route_type") or 0)
-        if config.is_excluded_route_type(rtype):
+        if not config.is_rail_route_type(rtype):
             continue
         line = r.get("route_short_name", "")
         print(f"{line:<6} {rtype:<10} {config.LINE_TO_TAB.get(line, '-'):<8} {r.get('route_long_name', '')}")

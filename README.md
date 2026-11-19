@@ -68,14 +68,16 @@ tests/              syntetiska tester: python -m pytest
 
 `RT_MONTHLY_BUDGET` stoppar hämtning innan nyckeln spärras. `USE_VEHICLE_POSITIONS=true` dubblar anropen.
 
-## Öppna frågor att verifiera med riktig data
+## Verifierat mot riktig data (19 nov 2026)
 
-- [ ] Finns alla nio flikar i TripUpdates (särskilt Roslagsbanan, Saltsjöbanan, Lidingöbanan, Linje 7)?
-- [ ] Behåller SL:s TripUpdates passerade hållplatser, eller bara kommande?
-- [ ] Vilka `route_type` och `route_short_name` används? (`--routes`)
-- [ ] Är `trip_short_name` satt för alla spårturer?
-- [ ] Hur väl stämmer avvikelsen mot kitt vid samma tidpunkt? Jämför några tågnummer manuellt.
-- [ ] `direction_id` 0/1 – matchar det kitts Riktning 1/2?
+- [x] Alla nio flikar finns i TripUpdates, med ungefär lika många rader som tidtabellen förväntar.
+- [x] TripUpdates behåller passerade hållplatser, så avläsningsplatsen kommer direkt ur flödet.
+- [x] Spårlinjerna har route_type 100 (pendeltåg), 401 (tunnelbana) och 900 (spårväg/lokalbanor).
+      SL:s båtlinjer (route_type 1000) har krockande nummer (10, 13, 21 …) och filtreras bort.
+- [x] `trip_short_name` är tomt för SL. Tågnumret tas från `samtrafiken_internal_trip_number`.
+- [ ] Jämför avvikelse mot kitt vid samma tidpunkt för några tågnummer.
+- [ ] `direction_id` 0 = norrgående för pendeltåg, medan kitts Riktning 1 är södergående. Bestäm etiketter.
+- [ ] Nockebybanan (linje 12) finns i datan men inte i kitt. Lägg till som egen flik?
 
 ## Idéer från intervjuerna med trafikinformatörerna
 

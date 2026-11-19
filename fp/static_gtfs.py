@@ -143,7 +143,7 @@ def load_static(path: Path | None = None) -> StaticData:
         for r in all_routes:
             rtype = int(r.get("route_type") or 0)
             line = (r.get("route_short_name") or "").strip()
-            if config.is_excluded_route_type(rtype):
+            if not config.is_rail_route_type(rtype):
                 continue
             tab = config.LINE_TO_TAB.get(line)
             if tab:
@@ -162,8 +162,10 @@ def load_static(path: Path | None = None) -> StaticData:
                 tab=tab,
                 headsign=(t.get("trip_headsign") or "").strip(),
                 direction_id=int(direction) if direction not in (None, "") else None,
-                # Trafiklab: trip_short_name = tågnummer, fallback route_short_name
-                train_number=(t.get("trip_short_name") or "").strip() or line,
+                # SL lämnar trip_short_name tomt; tågnumret finns i samtrafiken_internal_trip_number.
+                train_number=((t.get("trip_short_name") or "").strip()
+                              or (t.get("samtrafiken_internal_trip_number") or "").strip()
+                              or line),
                 service_id=t["service_id"],
             )
 

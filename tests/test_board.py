@@ -21,13 +21,15 @@ def static(tmp_path):
         "routes.txt": _csv([["route_id", "route_short_name", "route_long_name", "route_type"],
                             ["R43", "43", "Pendeltåg 43", "106"],
                             ["B7", "7", "Buss 7", "700"],      # ska filtreras bort
-                            ["T10", "10", "Blå linjen", "401"]]),
+                            ["T10", "10", "Blå linjen", "401"],
+                            ["F10", "10", "Båtlinje 10", "1000"]]),   # båt, ska filtreras bort
         "trips.txt": _csv([["route_id", "service_id", "trip_id", "trip_headsign", "direction_id", "trip_short_name"],
                            ["R43", "S1", "t1", "Nynäshamn", "0", "2335"],
                            ["R43", "S1", "t2", "Bålsta", "1", "2340"],
                            ["R43", "S1", "t3", "Nynäshamn", "0", "2337"],
                            ["B7", "S1", "b1", "Buss", "0", ""],
-                           ["T10", "S1", "m1", "Kungsträdgården", "1", ""]]),
+                           ["T10", "S1", "m1", "Kungsträdgården", "1", ""],
+                           ["F10", "S1", "f1", "Nacka strand", "0", ""]]),
         "stops.txt": _csv([["stop_id", "stop_name", "parent_station"],
                            ["A", "Odenplan", ""], ["B", "Stockholm City", ""], ["C", "Älvsjö", ""],
                            ["C1", "Älvsjö spår 1", "C"], ["D", "Västra skogen", ""], ["E", "Kungsträdgården", ""]]),
@@ -69,7 +71,7 @@ def _tu(feed, trip_id, updates, cancelled=False):
 
 
 def test_filters_and_maps(static):
-    assert set(static.trips) == {"t1", "t2", "t3", "m1"}  # buss 7 bortfiltrerad
+    assert set(static.trips) == {"t1", "t2", "t3", "m1"}  # buss 7 och båt 10 bortfiltrerade
     assert static.trips["t1"].tab == "PT" and static.trips["m1"].tab == "TB3"
     assert static.trips["t1"].train_number == "2335"
     assert static.trips["m1"].train_number == "10"  # fallback till linjenummer

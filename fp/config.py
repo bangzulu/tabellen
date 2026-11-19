@@ -48,7 +48,7 @@ TAB_BY_CODE = {t["code"]: t for t in TABS}
 LINE_TO_TAB = {line: t["code"] for t in TABS for line in t["lines"]}
 
 
-def is_excluded_route_type(route_type: int) -> bool:
-    """Bussar, långfärdsbussar och taxi har linjenummer som kan krocka med spårlinjer
-    (t.ex. buss 7). Trafiklab använder utökade route_types, därför intervallen."""
-    return route_type == 3 or 200 <= route_type <= 299 or 700 <= route_type <= 799 or 1500 <= route_type <= 1599
+def is_rail_route_type(route_type: int) -> bool:
+    """Bara spårtrafik. Bussar och båtar (route_type 1000) har linjenummer som krockar
+    med spårlinjerna, t.ex. båtlinje 10, 13 och 21. Trafiklab använder utökade typer."""
+    return route_type in (0, 1, 2) or 100 <= route_type <= 199 or 400 <= route_type <= 499 or 900 <= route_type <= 999
