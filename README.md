@@ -39,14 +39,12 @@ Demodatan är påhittad. Flödet blir "inaktuellt" efter 2 minuter – kör skri
 tittar och startar vid första anropet (några sekunders fördröjning). En volym på 1 GB
 håller tidtabellen mellan omstarter. Fakturor under 5 USD/månad efterskänks av Fly.
 
-Engångsuppsättning:
+Engångsuppsättning, helt i webbläsaren:
 
-```bash
-fly apps create tabellen          # upptaget? välj annat namn och ändra `app` i fly.toml
-fly secrets set -a tabellen GTFS_STATIC_KEY=... GTFS_RT_KEY=...
-fly deploy                        # skapar volymen automatiskt första gången
-fly tokens create deploy -a tabellen   # lägg som GitHub-secret FLY_API_TOKEN
-```
+1. Fly: skapa en organisationstoken under **Tokens** och kopiera den.
+2. GitHub: lägg den som repo-secret `FLY_API_TOKEN` (bredvid `GTFS_STATIC_KEY` och `GTFS_RT_KEY`).
+3. GitHub: **Actions → Deploy till Fly → Run workflow**. Appen skapas, nycklarna förs över
+   och sidan hamnar på `https://tabellen.fly.dev`. Är namnet upptaget, byt `app` i `fly.toml`.
 
 Därefter deployas varje push till `main` automatiskt (efter att testerna gått igenom).
 Sidan är publik, men realtidsanrop cachas 30 s och stoppas vid `RT_MONTHLY_BUDGET`.

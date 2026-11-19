@@ -1,4 +1,6 @@
 name: Deploy till Fly
+# Skapar appen första gången, för över Trafiklab-nycklarna från GitHub-secrets och deployar.
+# Kräver secret FLY_API_TOKEN (organisationstoken från Flys webbgränssnitt).
 on:
   push:
     branches: [main]
@@ -20,5 +22,16 @@ jobs:
         run: echo "::notice::FLY_API_TOKEN saknas – hoppar över deploy."
       - if: env.FLY_API_TOKEN != ''
         uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Skapa appen om den inte finns
+        if: env.FLY_API_TOKEN != ''
+        run: |
+          APP=$(grep -E '^app *=' fly.toml | cut -d'"' -f2)
+          flyctl status -a "$APP" >/dev/null 2>&1 || flyctl apps create "$APP" --org personal
+      - name: För över Trafiklab-nycklar
+        if: env.FLY_API_TOKEN != ''
+        run: flyctl secrets set --stage GTFS_STATIC_KEY="$GTFS_STATIC_KEY" GTFS_RT_KEY="$GTFS_RT_KEY"
+        env:
+          GTFS_STATIC_KEY: ${{ secrets.GTFS_STATIC_KEY }}
+          GTFS_RT_KEY: ${{ secrets.GTFS_RT_KEY }}
       - if: env.FLY_API_TOKEN != ''
         run: flyctl deploy --remote-only
