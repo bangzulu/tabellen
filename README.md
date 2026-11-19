@@ -28,7 +28,10 @@ Demodatan är påhittad. Flödet blir "inaktuellt" efter 2 minuter – kör skri
    python scripts/coverage_check.py --offline  # analysera igen utan nya anrop
    ```
 3. Starta: `flask --app fp.server run --debug`
-4. Utveckla vidare mot sparade flöden: `USE_SAVED_FEEDS=true flask --app fp.server run --debug`
+4. Utan lokala nycklar: kör **Actions → Täckningskontroll → Run workflow**. Resultatet syns i
+   jobbets sammanfattning och de sparade `.pb`-flödena kan laddas ner som artefakt.
+   Nycklarna ligger som repo-secrets `GTFS_STATIC_KEY` och `GTFS_RT_KEY`.
+5. Utveckla vidare mot sparade flöden: `USE_SAVED_FEEDS=true flask --app fp.server run --debug`
 
 ## Struktur
 
