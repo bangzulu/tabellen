@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fordonspositioner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f7f9;
+    --surface: #ffffff;
+    --ink: #14202b;
+    --muted: #5d6b78;
+    --rule: #dde3e8;
+    --band: #eef2f5;
+    --nav: #1c4e80;
+    --nav-ink: #ffffff;
+    --late: #b26a00;
+    --late-bg: #fdf1dc;
+    --very-late: #b3261e;
+    --very-late-bg: #fbe4e2;
+    --ok: #2f6b3a;
+    --focus: #3b82c4;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1820; --surface: #16212b; --ink: #e8eef3; --muted: #9aa8b5;
+      --rule: #2a3946; --band: #1b2833; --nav: #23598f; --nav-ink: #ffffff;
+      --late: #f2b544; --late-bg: #3a2c10; --very-late: #ff8a80; --very-late-bg: #43201d;
+      --ok: #8fd19e; --focus: #7cb8ee;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.4 "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
+
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 20px; margin-bottom: 16px; }
+  h1 { font-size: 1.5rem; font-weight: 800; margin: 0; letter-spacing: -0.01em; }
+  .freshness { color: var(--muted); font-size: .95rem; }
+  .freshness.stale { color: var(--very-late); font-weight: 600; }
+
+  nav { display: flex; gap: 2px; overflow-x: auto; background: var(--nav); border-radius: 6px 6px 0 0; padding: 4px; }
+  nav button {
+    flex: 0 0 auto; border: 0; background: transparent; color: var(--nav-ink); opacity: .78;
+    font: inherit; font-weight: 600; padding: 10px 14px; border-radius: 4px; cursor: pointer; white-space: nowrap;
+  }
+  nav button:hover { opacity: 1; }
+  nav button[aria-selected="true"] { background: var(--surface); color: var(--ink); opacity: 1; }
+  nav .n { font-weight: 400; opacity: .7; margin-left: 4px; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 10px 12px; background: var(--surface);
+             border: 1px solid var(--rule); border-top: 0; font-size: .95rem; }
+  .toolbar label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+  .toolbar input { width: 18px; height: 18px; accent-color: var(--nav); }
+
+  .board { background: var(--surface); border: 1px solid var(--rule); border-top: 0; border-radius: 0 0 6px 6px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-weight: 600; color: var(--muted); font-size: .85rem; padding: 10px 12px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+  td.t, th.t { text-align: right; white-space: nowrap; }
+  tr.dir td { background: var(--band); padding: 8px 12px; }
+  tr.dir strong { font-weight: 800; margin-right: 10px; }
+  tr.dir span { color: var(--muted); }
+  tr.cancelled td:not(.dev) { color: var(--muted); text-decoration: line-through; }
+  .line { font-weight: 800; }
+  .sub { display: block; color: var(--muted); font-size: .85rem; }
+  .src { color: var(--muted); font-size: .8rem; margin-left: 4px; cursor: help; }
+
+  .dev { width: 1%; }
+  .pill { display: inline-block; min-width: 3.2em; text-align: center; font-weight: 800; padding: 3px 8px; border-radius: 4px; }
+  .pill.zero { color: var(--muted); font-weight: 400; }
+  .pill.early { color: var(--ok); }
+  .pill.late { color: var(--late); background: var(--late-bg); }
+  .pill.very-late, .pill.cancelled { color: var(--very-late); background: var(--very-late-bg); }
+  .pill.unknown { color: var(--muted); font-weight: 400; }
+
+  .message { padding: 32px 16px; text-align: center; color: var(--muted); }
+  .message.error { color: var(--very-late); }
+  footer { margin-top: 14px; color: var(--muted); font-size: .85rem; }
+
+  @media (max-width: 720px) {
+    .hide-sm { display: none; }
+    td, th { padding: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Senast passerade stationer</h1>
+    <div class="freshness" id="freshness" aria-live="polite">Hämtar…</div>
+  </header>
+
+  <nav id="tabs" role="tablist" aria-label="Trafikslag"></nav>
+  <div class="toolbar">
+    <label><input type="checkbox" id="onlyDeviations"> Visa bara avvikelser (±2 min eller inställda)</label>
+    <label><input type="checkbox" id="sortByDelay"> Störst försening först</label>
+  </div>
+  <div class="board" id="board" role="tabpanel"></div>
+  <footer>Data från Trafiklab (GTFS Regional, SL). Avvikelse i minuter: + betyder sen. Uppdateras var 30:e sekund.</footer>
+</div>
+
+<script>
+const REFRESH_MS = 30000;
+const fmt = new Intl.DateTimeFormat("sv-SE", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Stockholm" });
+const fmtSec = new Intl.DateTimeFormat("sv-SE", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Europe/Stockholm" });
+const SRC = {
+  "tripupdate": ["", ""],
+  "tripupdate-inferred": ["≈", "Härledd: flödet saknar passerade hållplatser"],
+  "vehicleposition": ["◦", "Från fordonsposition (GPS)"],
+  "schedule": ["", ""],
+};
+
+let tabs = [], current = null, timer = null, last = null;
+const $ = (id) => document.getElementById(id);
+
+function el(tag, attrs = {}, ...children) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") n.className = v; else if (k === "text") n.textContent = v; else n.setAttribute(k, v);
+  }
+  for (const c of children) if (c != null) n.append(c);
+  return n;
+}
+const time = (s) => (s ? fmt.format(new Date(s * 1000)) : "–");
+
+function pill(row) {
+  if (row.status === "cancelled") return el("span", { class: "pill cancelled", text: "Inställd" });
+  const d = row.delay_min;
+  if (d == null) return el("span", { class: "pill unknown", text: "?", title: "Ingen avvikelse i datat" });
+  const cls = d >= 10 ? "very-late" : d >= 3 ? "late" : d <= -1 ? "early" : "zero";
+  return el("span", { class: "pill " + cls, text: d > 0 ? "+" + d : String(d) });
+}
+
+function renderTabs(counts = {}) {
+  const nav = $("tabs");
+  nav.replaceChildren(...tabs.map((t) => {
+    const b = el("button", { role: "tab", "aria-selected": String(t.code === current), id: "tab-" + t.code, "data-code": t.code,
+                             tabindex: t.code === current ? "0" : "-1" }, t.name);
+    if (counts[t.code] != null) b.append(el("span", { class: "n", text: counts[t.code] }));
+    b.addEventListener("click", () => select(t.code));
+    return b;
+  }));
+}
+
+function renderBoard(data) {
+  const onlyDev = $("onlyDeviations").checked, byDelay = $("sortByDelay").checked;
+  const board = $("board");
+  const thead = el("thead", {}, el("tr", {},
+    el("th", { class: "dev", text: "Avvikelse" }), el("th", { text: "Linje" }), el("th", { text: "Destination" }),
+    el("th", { text: "Senast passerad" }), el("th", { class: "t", text: "Passerade" }),
+    el("th", { class: "t hide-sm", text: "Ordinarie" }), el("th", { class: "hide-sm", text: "Nästa" }),
+    el("th", { class: "t", text: "Tågnr" })));
+  const tbody = el("tbody");
+  let shown = 0;
+
+  for (const g of data.groups) {
+    let rows = g.rows;
+    if (onlyDev) rows = rows.filter((r) => r.status === "cancelled" || (r.delay_min != null && Math.abs(r.delay_min) >= 2));
+    if (byDelay) rows = [...rows].sort((a, b) => (b.status === "cancelled") - (a.status === "cancelled") || (b.delay_min ?? -99) - (a.delay_min ?? -99));
+    if (!rows.length) continue;
+    tbody.append(el("tr", { class: "dir" }, el("td", { colspan: "8" },
+      el("strong", { text: g.label }), el("span", { text: g.destinations.length ? "mot " + g.destinations.join(", ") : "" }))));
+    for (const r of rows) {
+      shown++;
+      const [mark, hint] = SRC[r.observed_source] || ["", ""];
+      const obs = el("td", {}, r.observed_stop);
+      if (mark) obs.append(el("span", { class: "src", title: hint, "aria-label": hint, text: mark }));
+      if (r.status === "terminus") obs.append(el("span", { class: "sub", text: "Vid ändhållplats" }));
+      tbody.append(el("tr", { class: r.status },
+        el("td", { class: "dev" }, pill(r)),
+        el("td", { class: "line", text: r.line }),
+        el("td", { text: r.destination }),
+        obs,
+        el("td", { class: "t", text: time(r.passed_at) }),
+        el("td", { class: "t hide-sm", text: time(r.scheduled_at) }),
+        el("td", { class: "hide-sm" }, r.next_stop || "–",
+           r.next_expected_at ? el("span", { class: "sub", text: "förväntas " + time(r.next_expected_at) }) : null),
+        el("td", { class: "t", text: r.train_number })));
+    }
+  }
+  if (!shown) {
+    board.replaceChildren(el("div", { class: "message", text: onlyDev ? "Inga avvikelser just nu." : "Inga fordon i trafik för det här trafikslaget." }));
+  } else {
+    board.replaceChildren(el("table", {}, thead, tbody));
+  }
+}
+
+function renderFreshness(data) {
+  const f = $("freshness");
+  if (!data.feed_timestamp) { f.textContent = ""; return; }
+  const age = Math.round(Date.now() / 1000 - data.feed_timestamp);
+  f.textContent = `Data från ${fmtSec.format(new Date(data.feed_timestamp * 1000))} (${age} s sedan)`;
+  f.classList.toggle("stale", age > data.max_age_seconds);
+  if (age > data.max_age_seconds) f.textContent += " – inaktuell";
+}
+
+function showError(msg) {
+  $("board").replaceChildren(el("div", { class: "message error", text: msg }));
+}
+
+async function load() {
+  clearTimeout(timer);
+  try {
+    const res = await fetch(`/api/board?tab=${encodeURIComponent(current)}`);
+    const data = await res.json();
+    if (!res.ok) {
+      showError(data.code === "budget"
+        ? "Månadens API-kvot är slut. Höj RT_MONTHLY_BUDGET eller byt till Silver-nyckel."
+        : (data.error || "Kunde inte hämta data.") + " Försöker igen om 30 sekunder.");
+    } else {
+      last = data;
+      renderTabs(data.counts);
+      renderBoard(data);
+      renderFreshness(data);
+    }
+  } catch (e) {
+    showError("Servern svarar inte. Försöker igen om 30 sekunder.");
+  }
+  timer = setTimeout(load, REFRESH_MS);
+}
+
+function select(code, focus = false) {
+  current = code;
+  history.replaceState(null, "", "#" + code);
+  renderTabs(last?.counts);
+  if (focus) $("tab-" + code)?.focus();
+  $("board").replaceChildren(el("div", { class: "message", text: "Hämtar…" }));
+  load();
+}
+
+// Piltangenter flyttar mellan flikar (fungerar för alla flikar, och Tab-tangenten lämnas ifred)
+$("tabs").addEventListener("keydown", (e) => {
+  if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
+  const i = tabs.findIndex((t) => t.code === current);
+  const next = tabs[(i + (e.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length];
+  e.preventDefault();
+  select(next.code, true);
+});
+for (const id of ["onlyDeviations", "sortByDelay"]) $(id).addEventListener("change", () => last && renderBoard(last));
+setInterval(() => last && renderFreshness(last), 5000);
+window.addEventListener("hashchange", () => {
+  const code = location.hash.slice(1);
+  if (code !== current && tabs.some((t) => t.code === code)) select(code);
+});
+
+(async () => {
+  tabs = await (await fetch("/api/tabs")).json();
+  const fromHash = location.hash.slice(1);
+  select(tabs.some((t) => t.code === fromHash) ? fromHash : "PT");
+})();
+</script>
+</body>
+</html>
