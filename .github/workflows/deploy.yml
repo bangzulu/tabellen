@@ -35,3 +35,21 @@ jobs:
           GTFS_RT_KEY: ${{ secrets.GTFS_RT_KEY }}
       - if: env.FLY_API_TOKEN != ''
         run: flyctl deploy --remote-only
+      - name: Se till att appen har publika IP-adresser
+        if: env.FLY_API_TOKEN != ''
+        run: |
+          flyctl ips list
+          flyctl ips list --json | grep -q '"v4"\|shared_v4' || flyctl ips allocate-v4 --shared
+          flyctl ips list --json | grep -q '"v6"' || flyctl ips allocate-v6
+          flyctl ips list
+      - name: Kontrollera att sidan svarar
+        if: env.FLY_API_TOKEN != ''
+        run: |
+          APP=$(grep -E '^app *=' fly.toml | cut -d'"' -f2)
+          flyctl status
+          for i in $(seq 1 12); do
+            if curl -fsS --max-time 30 "https://$APP.fly.dev/api/health"; then echo; exit 0; fi
+            sleep 10
+          done
+          flyctl logs --no-tail | tail -50
+          exit 1
