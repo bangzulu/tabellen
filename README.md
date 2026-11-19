@@ -1,6 +1,6 @@
 # Fordonspositioner – öppen-data-variant
 
-En egen version av SL:s *Senast avlästa fordonspositioner* (kitt.sl.se), byggd på
+En egen version av SL:s *Senast avlästa fordonspositioner* byggd på
 Trafiklabs GTFS Regional (statisk + realtid) för SL. Flask-backend, en HTML-sida utan byggsteg.
 
 ## Kom igång utan nyckel (demodata)
