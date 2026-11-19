@@ -33,6 +33,24 @@ Demodatan är påhittad. Flödet blir "inaktuellt" efter 2 minuter – kör skri
    Nycklarna ligger som repo-secrets `GTFS_STATIC_KEY` och `GTFS_RT_KEY`.
 5. Utveckla vidare mot sparade flöden: `USE_SAVED_FEEDS=true flask --app fp.server run --debug`
 
+## Drift på Fly.io
+
+`fly.toml` kör en maskin (shared-cpu-1x, 256 MB) i Stockholm som stängs av när ingen
+tittar och startar vid första anropet (några sekunders fördröjning). En volym på 1 GB
+håller tidtabellen mellan omstarter. Fakturor under 5 USD/månad efterskänks av Fly.
+
+Engångsuppsättning:
+
+```bash
+fly apps create tabellen          # upptaget? välj annat namn och ändra `app` i fly.toml
+fly secrets set -a tabellen GTFS_STATIC_KEY=... GTFS_RT_KEY=...
+fly deploy                        # skapar volymen automatiskt första gången
+fly tokens create deploy -a tabellen   # lägg som GitHub-secret FLY_API_TOKEN
+```
+
+Därefter deployas varje push till `main` automatiskt (efter att testerna gått igenom).
+Sidan är publik, men realtidsanrop cachas 30 s och stoppas vid `RT_MONTHLY_BUDGET`.
+
 ## Struktur
 
 ```

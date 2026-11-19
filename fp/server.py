@@ -11,7 +11,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from . import config
 from .board import build_rows, group_for_tab
 from .realtime import BudgetExceeded, FeedCache
-from .static_gtfs import TZ, StaticData, load_static
+from .static_gtfs import TZ, StaticData, load_static, window_dates
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("fp")
@@ -30,7 +30,7 @@ def get_static() -> StaticData:
     day = now.strftime("%Y%m%d")
     with _static_lock:
         if _static is None or (_static_day != day and now.hour >= 7):
-            _static = load_static()
+            _static = load_static(dates=window_dates(now))
             _static_day = day
         return _static
 

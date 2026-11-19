@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from fp import config  # noqa: E402
 from fp.board import build_rows  # noqa: E402
 from fp.realtime import FeedCache, load_feed_file  # noqa: E402
-from fp.static_gtfs import candidate_service_dates, load_static, to_epoch  # noqa: E402
+from fp.static_gtfs import candidate_service_dates, load_static, to_epoch, window_dates  # noqa: E402
 
 SAVED = {name: config.DATA_DIR / f"{name}.pb" for name in ("TripUpdates", "VehiclePositions")}
 
@@ -38,7 +38,7 @@ def main() -> None:
     ap.add_argument("--offline", action="store_true")
     args = ap.parse_args()
 
-    static = load_static()
+    static = load_static(dates=window_dates())
     if args.routes:
         list_routes(static)
         return

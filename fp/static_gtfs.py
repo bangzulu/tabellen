@@ -23,7 +23,7 @@ TZ = ZoneInfo(config.TIMEZONE)
 ZIP_PATH = config.DATA_DIR / f"{config.OPERATOR}.zip"
 
 
-@dataclass
+@dataclass(slots=True)
 class StopTime:
     seq: int
     stop_id: str
@@ -135,9 +135,17 @@ def _reader(zf: zipfile.ZipFile, name: str):
     return csv.DictReader(io.TextIOWrapper(zf.open(name), encoding="utf-8-sig"))
 
 
-def load_static(path: Path | None = None) -> StaticData:
+def load_static(path: Path | None = None, dates: set[str] | None = None) -> StaticData:
+    """dates: läs bara in turer som går dessa tjänstedygn (YYYYMMDD). Sparar mycket minne;
+    hela tidtabellen tar ~200 MB, tre dygn en bråkdel. None = alla turer."""
     path = path or ensure_static_zip()
     with zipfile.ZipFile(path) as zf:
+        service_dates: dict[str, set[str]] = {}
+        if "calendar_dates.txt" in zf.namelist():
+            for cd in _reader(zf, "calendar_dates.txt"):
+                if cd.get("exception_type", "1") == "1" and (dates is None or cd["date"] in dates):
+                    service_dates.setdefault(cd["service_id"], set()).add(cd["date"])
+
         all_routes = list(_reader(zf, "routes.txt"))
         routes: dict[str, tuple[str, str]] = {}  # route_id -> (line, tab)
         for r in all_routes:
@@ -152,6 +160,8 @@ def load_static(path: Path | None = None) -> StaticData:
         trips: dict[str, Trip] = {}
         for t in _reader(zf, "trips.txt"):
             if t["route_id"] not in routes:
+                continue
+            if dates is not None and t["service_id"] not in service_dates:
                 continue
             line, tab = routes[t["route_id"]]
             direction = t.get("direction_id")
@@ -190,11 +200,7 @@ def load_static(path: Path | None = None) -> StaticData:
             stop_names[sid] = (parent or s)["stop_name"]
 
         needed = {t.service_id for t in trips.values()}
-        service_dates: dict[str, set[str]] = {}
-        if "calendar_dates.txt" in zf.namelist():
-            for cd in _reader(zf, "calendar_dates.txt"):
-                if cd["service_id"] in needed and cd.get("exception_type", "1") == "1":
-                    service_dates.setdefault(cd["service_id"], set()).add(cd["date"])
+        service_dates = {k: v for k, v in service_dates.items() if k in needed}
 
     log.info("Statisk data: %d turer, %d linjer", len(trips), len(routes))
     return StaticData(trips=trips, stop_names=stop_names, service_dates=service_dates,
@@ -203,6 +209,12 @@ def load_static(path: Path | None = None) -> StaticData:
 
 def today_service_date(now: datetime | None = None) -> str:
     return (now or datetime.now(TZ)).strftime("%Y%m%d")
+
+
+def window_dates(now: datetime | None = None) -> set[str]:
+    """Igår, idag och imorgon. Imorgon behövs för att klara natten fram till nästa omladdning."""
+    now = now or datetime.now(TZ)
+    return {(now.date() + timedelta(days=d)).strftime("%Y%m%d") for d in (-1, 0, 1)}
 
 
 def candidate_service_dates(now: datetime | None = None) -> list[str]:

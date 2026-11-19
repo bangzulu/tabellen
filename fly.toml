@@ -1,0 +1,27 @@
+# Billigast möjliga: en liten maskin i Stockholm som stängs av när ingen tittar.
+# Fakturor under 5 USD/månad efterskänks av Fly.
+app = "tabellen"
+primary_region = "arn"
+
+[env]
+  DATA_DIR = "/data"
+  RT_CACHE_SECONDS = "30"
+  RT_MONTHLY_BUDGET = "28000"
+
+# Volym så att tidtabellen (60 MB) inte laddas ner igen vid varje omstart.
+# Statiska nyckeln tillåter bara 65 nedladdningar per månad.
+[mounts]
+  source = "tabellen_data"
+  destination = "/data"
+  initial_size = "1gb"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
