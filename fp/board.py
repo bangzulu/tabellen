@@ -240,3 +240,46 @@ def group_for_tab(rows: list[Row], tab: str) -> list[dict]:
             "rows": [asdict(r) for r in items],
         })
     return out
+
+
+def base_line(line: str, tab_lines: list[str]) -> str:
+    """'27S' -> '27', '43X' -> '43' om grundlinjen finns i fliken, annars linjen själv."""
+    base = line.rstrip("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+    return base if base and base != line and base in tab_lines else line
+
+
+def line_patterns(static: StaticData) -> dict[str, list[dict]]:
+    """Stationsordning per linje och flik för linjevyn. Varje linje ritas efter sin längsta tur
+    (varianter som 27S och 43X slås ihop med grundlinjen) med nordligaste änden överst."""
+    from . import config
+
+    best: dict[tuple[str, str], Trip] = {}
+    variants: dict[tuple[str, str], set[str]] = defaultdict(set)
+    for t in static.trips.values():
+        key = (t.tab, base_line(t.line, config.TAB_BY_CODE[t.tab]["lines"]))
+        variants[key].add(t.line)
+        if key not in best or len(t.stop_ids) > len(best[key].stop_ids):
+            best[key] = t
+
+    out: dict[str, list[dict]] = defaultdict(list)
+    for (tab, line), trip in best.items():
+        names: list[str] = []
+        for sid in trip.stop_ids:
+            name = static.stop_name(sid)
+            if not names or names[-1] != name:
+                names.append(name)
+        first, last = trip.stop_ids[0], trip.stop_ids[-1]
+        flip = static.stop_lat.get(first, 0) < static.stop_lat.get(last, 0)
+        down = trip.direction_id
+        if flip:
+            names.reverse()
+            down = None if down is None else 1 - down
+        out[tab].append({
+            "line": line,
+            "variants": sorted(variants[(tab, line)], key=lambda x: (len(x), x)),
+            "stations": names,
+            "down_direction_id": down,   # direction_id för tåg som går uppifrån och ned
+        })
+    for tab in out:
+        out[tab].sort(key=lambda d: (len(d["line"]), d["line"]))
+    return dict(out)

@@ -24,6 +24,10 @@
     --very-late-bg: #fbe4e2;
     --ok: #2f6b3a;
     --focus: #3b82c4;
+    --select-bg: #e3eefa;
+    --select-edge: #1c4e80;
+    --dot: #ffffff;
+    --line: #1c4e80;            /* sätts per flik från JS */
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
@@ -31,18 +35,19 @@
       --bg: #0f1820; --surface: #16212b; --ink: #e8eef3; --muted: #9aa8b5;
       --rule: #2a3946; --band: #1b2833; --nav: #23598f; --nav-ink: #ffffff;
       --late: #f2b544; --late-bg: #3a2c10; --very-late: #ff8a80; --very-late-bg: #43201d;
-      --ok: #8fd19e; --focus: #7cb8ee;
+      --ok: #8fd19e; --focus: #7cb8ee; --select-bg: #1d3550; --select-edge: #7cb8ee; --dot: #e8eef3;
       color-scheme: dark;
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
     font: 16px/1.4 "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", system-ui, sans-serif;
     font-variant-numeric: tabular-nums;
   }
   :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-  .wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 20px 16px 48px; }
 
   header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 20px; margin-bottom: 16px; }
   h1 { font-size: 1.5rem; font-weight: 800; margin: 0; letter-spacing: -0.01em; }
@@ -102,7 +107,11 @@
              border: 1px solid var(--rule); border-top: 0; font-size: .95rem; }
   .toolbar label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
   .toolbar input { width: 18px; height: 18px; accent-color: var(--nav); }
+  .toolbar .right { margin-left: auto; }
 
+  /* Tabell + linjevy */
+  .main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+  .main.with-lv { grid-template-columns: minmax(0, 1fr) 330px; }
   .board { background: var(--surface); border: 1px solid var(--rule); border-top: 0; border-radius: 0 0 6px 6px; overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; }
   th { text-align: left; font-weight: 600; color: var(--muted); font-size: .85rem; padding: 10px 12px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
@@ -111,6 +120,10 @@
   tr.dir td { background: var(--band); padding: 8px 12px; }
   tr.dir strong { font-weight: 800; margin-right: 10px; }
   tr.dir span { color: var(--muted); }
+  tbody tr.veh { cursor: pointer; }
+  tbody tr.veh:hover td { background: var(--band); }
+  tbody tr.veh.selected td { background: var(--select-bg); }
+  tbody tr.veh.selected td:first-child { box-shadow: inset 4px 0 0 var(--select-edge); }
   tr.cancelled td:not(.dev):not(.has-note) { color: var(--muted); text-decoration: line-through; }
   tr.cancelled td.has-note > .dest { color: var(--muted); text-decoration: line-through; }
   .line { font-weight: 800; }
@@ -126,16 +139,70 @@
   .pill.very-late, .pill.cancelled { color: var(--very-late); background: var(--very-late-bg); }
   .pill.unknown { color: var(--muted); font-weight: 400; }
 
+  /* Linjevy (termometer) */
+  .lv {
+    position: sticky; top: 12px; margin-top: 12px; max-height: calc(100vh - 24px);
+    display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px;
+  }
+  .lv-head { display: flex; align-items: flex-start; gap: 10px; padding: 12px 12px 8px; }
+  .lv-badge { flex: none; min-width: 2.4em; padding: 3px 8px; border-radius: 4px; background: var(--line); color: #fff; font-weight: 800; text-align: center; }
+  .lv-title { flex: 1; min-width: 0; }
+  .lv-title strong { display: block; font-size: 1.05rem; font-weight: 800; line-height: 1.2; }
+  .lv-title span { display: block; color: var(--muted); font-size: .85rem; }
+  .lv-close { flex: none; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 1.4rem; line-height: 1; padding: 2px 6px; border-radius: 4px; cursor: pointer; }
+  .lv-close:hover { color: var(--ink); background: var(--band); }
+  .lv-lines { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 8px; }
+  .lv-lines button {
+    font: inherit; font-size: .85rem; font-weight: 700; padding: 3px 9px; border-radius: 4px; cursor: pointer;
+    border: 1px solid var(--rule); background: var(--surface); color: var(--ink);
+  }
+  .lv-lines button[aria-pressed="true"] { background: var(--line); border-color: var(--line); color: #fff; }
+  .lv-lines button span { font-weight: 400; opacity: .75; margin-left: 4px; }
+  .lv-sel { margin: 0 12px 8px; padding: 8px 10px; border-radius: 4px; background: var(--select-bg); box-shadow: inset 4px 0 0 var(--select-edge); font-size: .9rem; }
+  .lv-sel .top { display: flex; align-items: center; gap: 8px; }
+  .lv-sel .pill { min-width: 2.6em; padding: 1px 6px; }
+  .lv-sel span.muted { color: var(--muted); }
+  .lv-legend { display: flex; justify-content: space-between; gap: 8px; padding: 6px 12px; border-top: 1px solid var(--rule); color: var(--muted); font-size: .8rem; font-weight: 600; }
+  .lv-scroll { flex: 1; overflow-y: auto; overscroll-behavior: contain; padding: 4px 0 8px; }
+  .lv-track { position: relative; }
+  .lv-rail { position: absolute; left: 51px; width: 6px; background: var(--line); border-radius: 3px; }
+  .lv-stn { position: absolute; left: 0; right: 0; height: 30px; display: flex; align-items: center; }
+  .lv-stn::before {
+    content: ""; position: absolute; left: 48px; top: 9px; width: 12px; height: 12px; border-radius: 50%;
+    background: var(--dot); border: 3px solid var(--line); box-sizing: border-box;
+  }
+  .lv-stn span { margin-left: 112px; font-size: .95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 8px; }
+  .lv-stn.end span { font-weight: 800; }
+  .lv-veh {
+    position: absolute; width: 24px; height: 24px; margin: -12px 0 0 -12px; padding: 0; border-radius: 50%;
+    border: 2px solid var(--surface); background: var(--line); color: #fff; font-size: 10px; line-height: 1;
+    display: grid; place-items: center; cursor: pointer; z-index: 1;
+    transition: top 1.2s linear, transform .15s;
+  }
+  .lv-veh.late { box-shadow: 0 0 0 3px var(--late); }
+  .lv-veh.very-late { box-shadow: 0 0 0 3px var(--very-late); }
+  .lv-veh:hover { transform: scale(1.15); z-index: 3; }
+  .lv-veh.selected { transform: scale(1.35); z-index: 4; box-shadow: 0 0 0 3px var(--surface), 0 0 0 6px var(--select-edge); }
+  .lv-foot { margin: 0; padding: 8px 12px; border-top: 1px solid var(--rule); color: var(--muted); font-size: .8rem; }
+  .lv-empty { padding: 16px 12px; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { .lv-veh { transition: none; } }
+
   .message { padding: 32px 16px; text-align: center; color: var(--muted); }
   .message.error { color: var(--very-late); }
   footer { margin-top: 14px; color: var(--muted); font-size: .85rem; }
 
+  @media (max-width: 1080px) {
+    .main.with-lv { grid-template-columns: minmax(0, 1fr); }
+    .lv { position: static; order: -1; margin-top: 12px; max-height: none; }
+    .lv-scroll { max-height: 55vh; }
+  }
   @media (max-width: 720px) {
     .hide-sm { display: none; }
     td, th { padding: 8px; }
     .trip-alerts li { grid-template-columns: 2.6em 3.5em 1fr; }
     .trip-alerts .tnr { display: none; }
     .alert .body { padding-left: 12px; }
+    .toolbar .right { margin-left: 0; }
   }
 </style>
 </head>
@@ -152,16 +219,24 @@
     <div class="toolbar">
       <label><input type="checkbox" id="onlyDeviations"> Visa bara avvikelser (±2 min, inställda eller med störning)</label>
       <label><input type="checkbox" id="sortByDelay"> Störst försening först</label>
+      <label class="right"><input type="checkbox" id="showLv"> Linjevy</label>
     </div>
-    <div class="board" id="board"><div class="message">Hämtar…</div></div>
+    <div class="main" id="main">
+      <div class="board" id="board"><div class="message">Hämtar…</div></div>
+      <aside class="lv" id="lv" aria-label="Linjevy" hidden></aside>
+    </div>
   </div>
-  <footer>Data från Trafiklab (GTFS Regional, SL), tabell och störningar. Avvikelse i minuter: + betyder sen.</footer>
+  <footer>Data från Trafiklab (GTFS Regional, SL), tabell och störningar. Avvikelse i minuter: + betyder sen.
+    Klicka på en avgång för att se den i linjevyn, eller på ett tåg i linjevyn för att hitta det i tabellen.</footer>
 </div>
 
 <script>
 const REFRESH_MS = 15000;
 const CACHE_KEY = "tabellen:last";
+const LV_KEY = "tabellen:linjevy";
 const CACHE_MAX_AGE_S = 600;
+const ROW = 30;                                   // px per station i linjevyn
+const LANE = { up: 25, down: 82 };                // x-mitt för tåg uppåt / nedåt
 const TZ = "Europe/Stockholm";
 const fmt = new Intl.DateTimeFormat("sv-SE", { hour: "2-digit", minute: "2-digit", timeZone: TZ });
 const fmtSec = new Intl.DateTimeFormat("sv-SE", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: TZ });
@@ -169,6 +244,8 @@ const fmtDay = new Intl.DateTimeFormat("sv-SE", { day: "numeric", month: "short"
 const fmtYmd = new Intl.DateTimeFormat("sv-SE", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: TZ });
 const TAB_NAMES = { PT: "Pendeltåg", RB: "Roslagsbanan", TVB: "Tvärbanan", SB: "Saltsjöbanan", LB: "Lidingöbanan",
                     SpvC: "Linje 7", TB1: "Gröna linjen", TB2: "Röda linjen", TB3: "Blå linjen" };
+const TAB_COLOR = { PT: "#c8327a", RB: "#7d4a9e", TVB: "#c26a12", SB: "#12858c", LB: "#7a5b4e",
+                    SpvC: "#66707a", TB1: "#2c8a40", TB2: "#cc2f27", TB3: "#1f6fb2" };
 const SRC = {
   "tripupdate": ["", ""],
   "tripupdate-inferred": ["≈", "Härledd: flödet saknar passerade hållplatser"],
@@ -177,8 +254,11 @@ const SRC = {
 };
 
 let current = null, timer = null, last = null, loading = false, lastError = null;
-const openAlerts = new Set();   // vilka störningar som är utfällda, överlever omritning
+let selected = null;                 // trip_id för vald avgång
+const lvLine = new Map();            // vald linje i linjevyn per flik
+const openAlerts = new Set();        // vilka störningar som är utfällda, överlever omritning
 const $ = (id) => document.getElementById(id);
+const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function el(tag, attrs = {}, ...children) {
   const n = document.createElement(tag);
@@ -195,25 +275,31 @@ function since(s) {
   const d = new Date(s * 1000);
   return "sedan " + (ymd(d) === ymd(new Date()) ? fmt.format(d) : fmtDay.format(d));
 }
+function store(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
+function recall(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
 
 function readCache() {
   try {
-    const c = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
+    const c = JSON.parse(recall(CACHE_KEY) || "null");
     if (c && c.tabs && Date.now() / 1000 - c.generated_at < CACHE_MAX_AGE_S) return c;
   } catch (e) {}
   return null;
 }
-function writeCache(data) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify(data)); } catch (e) {}
-}
 
+function delayClass(row) {
+  if (row.status === "cancelled") return "cancelled";
+  const d = row.delay_min;
+  if (d == null) return "unknown";
+  return d >= 10 ? "very-late" : d >= 3 ? "late" : d <= -1 ? "early" : "zero";
+}
 function pill(row) {
   if (row.status === "cancelled") return el("span", { class: "pill cancelled", text: "Inställd" });
   const d = row.delay_min;
   if (d == null) return el("span", { class: "pill unknown", text: "?", title: "Ingen avvikelse i datat" });
-  const cls = d >= 10 ? "very-late" : d >= 3 ? "late" : d <= -1 ? "early" : "zero";
-  return el("span", { class: "pill " + cls, text: d > 0 ? "+" + d : String(d) });
+  return el("span", { class: "pill " + delayClass(row), text: d > 0 ? "+" + d : String(d) });
 }
+
+/* ---------- Flikar ---------- */
 
 function renderTabs() {
   const codes = last ? Object.keys(last.tabs) : Object.keys(TAB_NAMES);
@@ -228,6 +314,8 @@ function renderTabs() {
     return b;
   }));
 }
+
+/* ---------- Störningar ---------- */
 
 function chips(lines) {
   return lines.length ? el("span", { class: "chips" }, ...lines.map((l) => el("span", { class: "chip", text: l }))) : null;
@@ -256,13 +344,12 @@ function minorSection(key, label, items) {
 function renderAlerts(tab) {
   const a = tab.alerts;
   const box = $("alerts");
-  const updated = last.alerts_timestamp ? "uppdaterad " + time(last.alerts_timestamp) : "";
   if (last.alerts_timestamp == null) {
     box.replaceChildren(el("p", { class: "calm", text: "Störningsinformationen kunde inte hämtas just nu." }));
     return;
   }
   box.replaceChildren(...[
-    el("div", { class: "alerts-head" }, el("h2", { text: "Störningar" }), el("span", { text: updated })),
+    el("div", { class: "alerts-head" }, el("h2", { text: "Störningar" }), el("span", { text: "uppdaterad " + time(last.alerts_timestamp) })),
     !a.traffic.length && !a.trips.length ? el("p", { class: "calm", text: "Inga kända trafikstörningar." }) : null,
     a.traffic.length ? el("ul", { class: "alert-list" }, ...a.traffic.map(alertItem)) : null,
     a.trips.length ? el("div", { class: "trip-alerts" },
@@ -276,6 +363,8 @@ function renderAlerts(tab) {
     minorSection("info", "Skyltar och övrigt", a.info),
   ].filter(Boolean));
 }
+
+/* ---------- Tabell ---------- */
 
 function renderBoard(tab) {
   const onlyDev = $("onlyDeviations").checked, byDelay = $("sortByDelay").checked;
@@ -302,7 +391,7 @@ function renderBoard(tab) {
       if (r.status === "terminus") obs.append(el("span", { class: "sub", text: "Vid ändhållplats" }));
       const dest = el("td", { class: r.notes?.length ? "has-note" : "" }, el("span", { class: "dest", text: r.destination }),
         ...(r.notes || []).map((n) => el("span", { class: "note", text: n })));
-      tbody.append(el("tr", { class: r.status },
+      const tr = el("tr", { class: "veh " + r.status, "data-trip": r.trip_id, tabindex: "0" },
         el("td", { class: "dev" }, pill(r)),
         el("td", { class: "line", text: r.line }),
         dest,
@@ -311,12 +400,215 @@ function renderBoard(tab) {
         el("td", { class: "t hide-sm", text: time(r.scheduled_at) }),
         el("td", { class: "hide-sm" }, r.next_stop || "–",
            r.next_expected_at ? el("span", { class: "sub", text: "förväntas " + time(r.next_expected_at) }) : null),
-        el("td", { class: "t", text: r.train_number })));
+        el("td", { class: "t", text: r.train_number }));
+      tbody.append(tr);
     }
   }
   $("board").replaceChildren(shown ? el("table", {}, thead, tbody)
     : el("div", { class: "message", text: onlyDev ? "Inga avvikelser just nu." : "Inga fordon i trafik för det här trafikslaget." }));
 }
+
+/* ---------- Linjevy ---------- */
+
+function tabRows(tab) { return tab.groups.flatMap((g) => g.rows); }
+
+function baseLineOf(tab, line) {
+  return tab.lines.find((l) => l.variants.includes(line))?.line ?? line;
+}
+
+function patternIndex(pat) {
+  if (!pat._index) {
+    pat._index = new Map();
+    pat.stations.forEach((s, i) => { if (!pat._index.has(s)) pat._index.set(s, i); });
+  }
+  return pat._index;
+}
+
+/* Var på linjen ett tåg är: position i "stationsenheter" (0 = översta stationen) och riktning. */
+function place(pat, r, now) {
+  if (r.status === "cancelled") return null;
+  const idx = patternIndex(pat);
+  const i = idx.get(r.observed_stop);
+  if (i == null) return null;
+  const j = r.next_stop ? idx.get(r.next_stop) : null;
+  let dir;
+  if (j != null && j !== i) dir = j > i ? "down" : "up";
+  else dir = r.direction_id === pat.down_direction_id ? "down" : "up";
+  let pos = i;
+  if (j != null && j !== i && r.status === "running") {
+    let f = 0;
+    if (r.passed_at && r.next_expected_at && r.next_expected_at > r.passed_at) {
+      f = (now - r.passed_at) / (r.next_expected_at - r.passed_at);
+    }
+    pos = i + (j - i) * Math.max(0, Math.min(0.9, f));   // aldrig framme innan datat säger det
+  }
+  return { pos, dir };
+}
+
+function currentPattern(tab) {
+  if (!tab.lines.length) return null;
+  let line = lvLine.get(current);
+  if (!tab.lines.some((l) => l.line === line)) {
+    // standard: linjen med flest fordon
+    const counts = new Map();
+    for (const r of tabRows(tab)) { const b = baseLineOf(tab, r.line); counts.set(b, (counts.get(b) || 0) + 1); }
+    line = [...tab.lines].sort((a, b) => (counts.get(b.line) || 0) - (counts.get(a.line) || 0))[0].line;
+    lvLine.set(current, line);
+  }
+  return tab.lines.find((l) => l.line === line);
+}
+
+function vehLabel(r, pat) {
+  const d = r.delay_min == null ? "" : r.delay_min > 0 ? `, ${r.delay_min} min sen` : r.delay_min < 0 ? `, ${-r.delay_min} min tidig` : ", i tid";
+  const where = r.next_stop && r.status === "running" ? `mellan ${r.observed_stop} och ${r.next_stop}` : `vid ${r.observed_stop}`;
+  return `Tåg ${r.train_number}, linje ${r.line} mot ${r.destination}, ${where}${d}`;
+}
+
+function renderLv() {
+  const box = $("lv");
+  const show = $("showLv").checked;
+  box.hidden = !show;
+  $("main").classList.toggle("with-lv", show);
+  if (!show || !last) return;
+  const tab = last.tabs[current];
+  document.documentElement.style.setProperty("--line", TAB_COLOR[current] || "#1c4e80");
+  const pat = currentPattern(tab);
+  const close = el("button", { class: "lv-close", "aria-label": "Stäng linjevyn", title: "Stäng linjevyn", text: "×" });
+  close.addEventListener("click", () => setLv(false));
+  if (!pat) {
+    box.replaceChildren(el("div", { class: "lv-head" }, el("div", { class: "lv-title" }, el("strong", { text: TAB_NAMES[current] })), close),
+      el("p", { class: "lv-empty", text: "Ingen linjeinformation för det här trafikslaget." }));
+    return;
+  }
+
+  const now = Date.now() / 1000;
+  const rows = tabRows(tab).filter((r) => baseLineOf(tab, r.line) === pat.line);
+  const placed = [], outside = [];
+  for (const r of rows) { const p = place(pat, r, now); if (p) placed.push([r, p]); else if (r.status !== "cancelled") outside.push(r); }
+
+  // Linjeväljare (flera linjer i samma flik)
+  let lineButtons = null;
+  if (tab.lines.length > 1) {
+    const counts = new Map();
+    for (const r of tabRows(tab)) if (r.status !== "cancelled") { const b = baseLineOf(tab, r.line); counts.set(b, (counts.get(b) || 0) + 1); }
+    lineButtons = el("div", { class: "lv-lines", role: "group", "aria-label": "Välj linje" }, ...tab.lines.map((l) => {
+      const b = el("button", { "aria-pressed": String(l.line === pat.line) }, l.line, el("span", { text: counts.get(l.line) || 0 }));
+      b.addEventListener("click", () => { lvLine.set(current, l.line); renderLv(); });
+      return b;
+    }));
+  }
+
+  // Spåret
+  const n = pat.stations.length;
+  const track = el("div", { class: "lv-track", style: `height:${n * ROW}px` },
+    el("div", { class: "lv-rail", style: `top:${ROW / 2}px;height:${(n - 1) * ROW}px` }),
+    ...pat.stations.map((s, i) => el("div", { class: "lv-stn" + (i === 0 || i === n - 1 ? " end" : ""), style: `top:${i * ROW}px` },
+      el("span", { text: s, title: s }))));
+
+  // Tåg; nära varandra i samma körfält förskjuts något i sidled
+  const lastY = { up: [], down: [] };
+  for (const [r, p] of placed.sort((a, b) => a[1].pos - b[1].pos)) {
+    const y = p.pos * ROW + ROW / 2;
+    const crowd = lastY[p.dir].filter((v) => Math.abs(v - y) < 20).length;
+    lastY[p.dir].push(y);
+    const x = LANE[p.dir] + (p.dir === "up" ? -1 : 1) * Math.min(crowd, 2) * 7;
+    const btn = el("button", {
+      class: "lv-veh " + p.dir + " " + delayClass(r) + (r.trip_id === selected ? " selected" : ""), "data-trip": r.trip_id,
+      style: `top:${y}px;left:${x}px`, "aria-label": vehLabel(r, pat), title: vehLabel(r, pat),
+      "aria-pressed": String(r.trip_id === selected),
+    }, p.dir === "up" ? "▲" : "▼");
+    btn.addEventListener("click", () => selectTrip(r.trip_id, "lv"));
+    track.append(btn);
+  }
+
+  const sel = selected && rows.find((r) => r.trip_id === selected);
+  const selCard = sel ? el("div", { class: "lv-sel", "aria-live": "polite" },
+    el("div", { class: "top" }, pill(sel), el("strong", { text: `${sel.line} ${sel.destination}` }), el("span", { class: "muted", text: "tåg " + sel.train_number })),
+    el("span", { class: "muted", text: sel.status === "running" && sel.next_stop
+      ? `${sel.observed_stop} → ${sel.next_stop}${sel.next_expected_at ? ", förväntas " + time(sel.next_expected_at) : ""}`
+      : sel.status === "terminus" ? `Vid ändhållplats ${sel.observed_stop}` : sel.observed_stop }),
+    outside.includes(sel) ? el("span", { class: "muted", text: " (kan inte placeras på linjen)" }) : null) : null;
+
+  box.replaceChildren(...[
+    el("div", { class: "lv-head" },
+      el("span", { class: "lv-badge", text: pat.line }),
+      el("div", { class: "lv-title" }, el("strong", { text: TAB_NAMES[current] }),
+        el("span", { text: `${pat.stations[0]} – ${pat.stations[n - 1]} · ${n} stationer · ${placed.length} i trafik` })),
+      close),
+    lineButtons,
+    selCard,
+    el("div", { class: "lv-legend" }, el("span", { text: "▲ mot " + pat.stations[0] }), el("span", { text: "▼ mot " + pat.stations[n - 1] })),
+    el("div", { class: "lv-scroll", id: "lv-scroll" }, track),
+    outside.length ? el("p", { class: "lv-foot", text: `${outside.length} ${outside.length === 1 ? "tåg" : "tåg"} på linjen kunde inte placeras (station utanför linjens huvudsträckning).` }) : null,
+  ].filter(Boolean));
+}
+
+function lastRowById(id) {
+  const tab = last?.tabs[current];
+  return tab ? tabRows(tab).find((r) => r.trip_id === id) : null;
+}
+
+/* Flytta tågen mjukt mellan uppdateringarna. */
+function tickPositions() {
+  if (!last || $("lv").hidden) return;
+  const tab = last.tabs[current];
+  const pat = currentPattern(tab);
+  if (!pat) return;
+  const now = Date.now() / 1000;
+  for (const btn of document.querySelectorAll(".lv-veh")) {
+    const r = lastRowById(btn.dataset.trip);
+    const p = r && place(pat, r, now);
+    if (p) btn.style.top = `${p.pos * ROW + ROW / 2}px`;
+  }
+}
+
+function setLv(show) {
+  $("showLv").checked = show;
+  store(LV_KEY, show ? "1" : "0");
+  renderLv();
+}
+
+/* ---------- Val av avgång (synkat mellan tabell och linjevy) ---------- */
+
+function selectTrip(id, source) {
+  selected = selected === id ? null : id;
+  const tab = last?.tabs[current];
+  const r = selected && tab ? tabRows(tab).find((x) => x.trip_id === selected) : null;
+  if (r) lvLine.set(current, baseLineOf(tab, r.line));
+  applySelection();
+  renderLv();
+  if (!selected) return;
+  const behavior = reducedMotion ? "auto" : "smooth";
+  if (source === "lv") {
+    document.querySelector(`tr.veh[data-trip="${CSS.escape(selected)}"]`)?.scrollIntoView({ block: "center", behavior });
+  } else {
+    const btn = document.querySelector(`.lv-veh[data-trip="${CSS.escape(selected)}"]`);
+    const sc = $("lv-scroll");
+    if (btn && sc) sc.scrollTo({ top: parseFloat(btn.style.top) - sc.clientHeight / 2, behavior });
+  }
+}
+
+function applySelection() {
+  for (const tr of document.querySelectorAll("tr.veh")) {
+    const on = tr.dataset.trip === selected;
+    tr.classList.toggle("selected", on);
+    if (on) tr.setAttribute("aria-current", "true"); else tr.removeAttribute("aria-current");
+  }
+}
+
+$("board").addEventListener("click", (e) => {
+  const tr = e.target.closest("tr.veh");
+  if (tr) selectTrip(tr.dataset.trip, "table");
+});
+$("board").addEventListener("keydown", (e) => {
+  const tr = e.target.closest("tr.veh");
+  if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); selectTrip(tr.dataset.trip, "table"); }
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && selected) { selected = null; applySelection(); renderLv(); }
+});
+
+/* ---------- Övrigt ---------- */
 
 function renderFreshness() {
   const f = $("freshness");
@@ -331,11 +623,14 @@ function renderFreshness() {
 
 function render() {
   renderTabs();
-  if (!last) return;
+  if (!last) { renderLv(); return; }
   const tab = last.tabs[current];
   if (!tab) return;
+  if (selected && !tabRows(tab).some((r) => r.trip_id === selected)) selected = null;   // tåget har försvunnit
   renderAlerts(tab);
   renderBoard(tab);
+  applySelection();
+  renderLv();
   renderFreshness();
 }
 
@@ -348,14 +643,12 @@ async function load() {
     const res = await fetch("/api/board");
     const data = await res.json();
     if (!res.ok) {
-      lastError = data.code === "budget"
-        ? "Månadens API-kvot är slut."
-        : (data.error || "Kunde inte hämta data.");
+      lastError = data.code === "budget" ? "Månadens API-kvot är slut." : (data.error || "Kunde inte hämta data.");
       if (!last) $("board").replaceChildren(el("div", { class: "message error", text: lastError + " Försöker igen strax." }));
     } else {
       last = data;
       lastError = null;
-      writeCache(data);
+      store(CACHE_KEY, JSON.stringify(data));
       render();
     }
   } catch (e) {
@@ -370,6 +663,7 @@ async function load() {
 
 function select(code, focus = false) {
   if (!TAB_NAMES[code]) code = "PT";
+  if (code !== current) selected = null;
   current = code;
   history.replaceState(null, "", "#" + code);
   render();   // data för alla flikar finns redan, inget nytt anrop behövs
@@ -384,7 +678,9 @@ $("tabs").addEventListener("keydown", (e) => {
   select(codes[(i + (e.key === "ArrowRight" ? 1 : -1) + codes.length) % codes.length], true);
 });
 for (const id of ["onlyDeviations", "sortByDelay"]) $(id).addEventListener("change", render);
+$("showLv").addEventListener("change", (e) => setLv(e.target.checked));
 setInterval(renderFreshness, 5000);
+setInterval(tickPositions, 3000);
 window.addEventListener("hashchange", () => {
   const code = location.hash.slice(1);
   if (code !== current && TAB_NAMES[code]) select(code);
@@ -393,8 +689,12 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && last && Date.now() / 1000 - last.generated_at > REFRESH_MS / 1000) load();
 });
 
+// Linjevyn är på som standard på breda skärmar; valet sparas.
+const savedLv = recall(LV_KEY);
+$("showLv").checked = savedLv == null ? innerWidth >= 1080 : savedLv === "1";
 // Visa senaste data från förra besöket direkt (om den är färsk nog), hämta sedan nytt.
 last = readCache();
+if (last && !Object.values(last.tabs)[0]?.lines) last = null;   // cache från äldre version
 select(location.hash.slice(1));
 load();
 </script>

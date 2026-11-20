@@ -48,6 +48,16 @@ Plattformsskyltens korta texter ("Främre tåg", "Ingen påstigning") filtreras 
 störning som publiceras både på linjen och på enskilda stationer slås ihop. Interna rubriker
 ("Unv-Kår", "… RP") ersätts med beskrivningens första mening.
 
+## Linjevy
+
+Till höger om tabellen (ovanför på smala skärmar) ritas vald linje som en "termometer" med
+tågen mellan stationerna: ▲ uppåt, ▼ nedåt, ring i orange/rött vid försening. Positionen
+räknas fram mellan senast passerad och nästa station utifrån tiderna och flyttas mjukt.
+Klick på en rad markerar tåget i linjevyn och tvärtom; Esc avmarkerar. Flikar med flera
+linjer (17/18/19) har linjeväljare. Stationsordningen kommer från linjens längsta tur
+(`line_patterns` i `fp/board.py`), med nordligaste änden överst. Linjevyn kan stängas och
+valet sparas i webbläsaren.
+
 ## Snabbhet
 
 - Tidtabellen sparas som pickle på volymen: omstart tar under en sekund i stället för 5–15 s.

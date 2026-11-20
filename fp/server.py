@@ -21,7 +21,7 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 
 from . import config
 from .alerts import build_alerts, to_json
-from .board import build_rows, group_for_tab
+from .board import build_rows, group_for_tab, line_patterns
 from .realtime import BudgetExceeded, FeedCache
 from .static_gtfs import TZ, StaticData, load_static_cached, window_dates
 
@@ -39,6 +39,7 @@ _static_ready = threading.Event()
 _reloading = False
 
 _board_cache: tuple[tuple, bytes, bytes] | None = None  # (nyckel, json, gzip)
+_patterns: tuple[int, dict] | None = None  # (id(static), linjemönster)
 _board_lock = threading.Lock()
 
 
@@ -101,8 +102,16 @@ def _fetch_feeds():
     return tu, vp, sa
 
 
+def _patterns_for(static: StaticData) -> dict:
+    global _patterns
+    if _patterns is None or _patterns[0] != id(static):
+        _patterns = (id(static), line_patterns(static))
+    return _patterns[1]
+
+
 def _build_payload(static: StaticData, tu, vp, sa) -> dict:
     now = int(time.time())
+    patterns = _patterns_for(static)
     alerts, notes = build_alerts(static, sa, now) if sa is not None else ({}, {})
     rows = build_rows(static, tu, vp, now=now, notes=notes)
     return {
@@ -115,6 +124,7 @@ def _build_payload(static: StaticData, tu, vp, sa) -> dict:
                 "count": sum(1 for r in rows if r.tab == t["code"]),
                 "groups": group_for_tab(rows, t["code"]),
                 "alerts": to_json(alerts.get(t["code"])),
+                "lines": patterns.get(t["code"], []),
             }
             for t in config.TABS
         },

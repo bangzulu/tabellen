@@ -86,6 +86,7 @@ class StaticData:
     loaded_from: str = ""
     rail_routes: dict[str, tuple[str, str]] = field(default_factory=dict)  # route_id -> (linje, flik)
     stop_tabs: dict[str, set[str]] = field(default_factory=dict)  # stop_id/parent -> flikar som stannar där
+    stop_lat: dict[str, float] = field(default_factory=dict)  # för att lägga norr överst i linjevyn
 
     def stop_name(self, stop_id: str | None) -> str:
         if not stop_id:
@@ -221,7 +222,7 @@ def load_static(path: Path | None = None, dates: set[str] | None = None) -> Stat
         del pending
 
         # Bara namn och föräldrastation sparas, och bara för hållplatser med spårtrafik.
-        stops_raw = {s["stop_id"]: (s["stop_name"], s.get("parent_station") or "")
+        stops_raw = {s["stop_id"]: (s["stop_name"], s.get("parent_station") or "", s.get("stop_lat") or "")
                      for s in _reader(zf, "stops.txt")}
 
         # Vilka flikar trafikerar varje hållplats (både plattform och föräldrastation),
@@ -229,13 +230,17 @@ def load_static(path: Path | None = None, dates: set[str] | None = None) -> Stat
         stop_tabs: dict[str, set[str]] = {}
         for trip in trips.values():
             for sid in trip.stop_ids:
-                for key in (sid, stops_raw.get(sid, ("", ""))[1]):
+                for key in (sid, stops_raw.get(sid, ("", "", ""))[1]):
                     if key:
                         stop_tabs.setdefault(sys.intern(key), set()).add(trip.tab)
-        stop_names = {}
+        stop_names, stop_lat = {}, {}
         for sid in stop_tabs:
-            name, parent = stops_raw.get(sid, (sid, ""))
+            name, parent, lat = stops_raw.get(sid, (sid, "", ""))
             stop_names[sid] = stops_raw[parent][0] if parent in stops_raw else name
+            try:
+                stop_lat[sid] = float(lat)
+            except ValueError:
+                pass
         del stops_raw
 
         needed = {t.service_id for t in trips.values()}
@@ -245,10 +250,10 @@ def load_static(path: Path | None = None, dates: set[str] | None = None) -> Stat
     return StaticData(trips=trips, stop_names=stop_names, service_dates=service_dates,
                       routes=all_routes, loaded_from=str(path),
                       rail_routes={rid: (line, tab) for rid, (line, tab) in routes.items()},
-                      stop_tabs=stop_tabs)
+                      stop_tabs=stop_tabs, stop_lat=stop_lat)
 
 
-CACHE_VERSION = 3  # höj när StaticData ändras
+CACHE_VERSION = 4  # höj när StaticData ändras
 
 
 def load_static_cached(dates: set[str]) -> StaticData:

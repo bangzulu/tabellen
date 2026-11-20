@@ -137,3 +137,13 @@ def test_grouping(static):
     groups = group_for_tab(build_rows(static, feed, now=now), "PT")
     assert [g["label"] for g in groups] == ["Riktning 1", "Riktning 2"]
     assert groups[0]["destinations"] == ["Nynäshamn"]
+
+
+def test_line_patterns(static):
+    from fp.board import base_line, line_patterns
+    assert base_line("27S", ["27", "27S"]) == "27"
+    assert base_line("42X", ["42X", "43"]) == "42X"
+    pats = line_patterns(static)
+    pt = {p["line"]: p for p in pats["PT"]}
+    assert pt["43"]["stations"] == ["Odenplan", "Stockholm City", "Älvsjö"]   # parent-namn, i turordning
+    assert pt["43"]["down_direction_id"] in (0, 1)
