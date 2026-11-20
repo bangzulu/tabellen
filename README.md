@@ -56,7 +56,8 @@ räknas fram mellan senast passerad och nästa station utifrån tiderna och flyt
 Klick på en rad markerar tåget i linjevyn och tvärtom; Esc avmarkerar. Flikar med flera
 linjer (17/18/19) har linjeväljare. Stationsordningen kommer från linjens längsta tur
 (`line_patterns` i `fp/board.py`), med nordligaste änden överst. Linjevyn kan stängas och
-valet sparas i webbläsaren.
+valet sparas i webbläsaren. På smala skärmar (under 1080 px) växlar man i stället mellan
+Tabell och Linjevy med en knapp; valt tåg följer med mellan vyerna.
 
 ## Snabbhet
 

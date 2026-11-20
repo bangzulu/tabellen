@@ -192,11 +192,23 @@
   .message.error { color: var(--very-late); }
   footer { margin-top: 14px; color: var(--muted); font-size: .85rem; }
 
+  /* Växel Tabell/Linjevy, bara på smala skärmar */
+  .viewswitch { display: none; }
   @media (max-width: 1080px) {
-    .main.with-lv { grid-template-columns: minmax(0, 1fr); }
-    .lv { position: static; margin-top: 12px; max-height: none; }
-    .lv-scroll { max-height: 55vh; }
+    .toolbar .right { display: none; }
+    .viewswitch { display: flex; width: 100%; padding: 3px; gap: 3px; border-radius: 6px; background: var(--band); }
+    .viewswitch button {
+      flex: 1; border: 0; border-radius: 4px; padding: 8px 10px; background: transparent; color: var(--muted);
+      font: inherit; font-weight: 700; cursor: pointer;
+    }
+    .viewswitch button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .12); }
+    .toolbar.lv-mode .table-only { display: none; }
+    .lv { position: static; margin-top: 0; max-height: none; border-top: 0; border-radius: 0 0 6px 6px; }
+    .lv-scroll { overflow: visible; }
+    .lv-close { display: none; }
   }
+  .lv-sel .goto { margin-top: 6px; font: inherit; font-size: .85rem; font-weight: 700; padding: 4px 10px; border-radius: 4px;
+                  border: 1px solid var(--select-edge); background: transparent; color: var(--select-edge); cursor: pointer; }
   @media (max-width: 720px) {
     .hide-sm { display: none; }
     td, th { padding: 8px; }
@@ -217,9 +229,13 @@
   <nav id="tabs" role="tablist" aria-label="Trafikslag"></nav>
   <div id="panel" role="tabpanel">
     <section class="alerts" id="alerts" aria-label="Störningar"></section>
-    <div class="toolbar">
-      <label><input type="checkbox" id="onlyDeviations"> Visa bara avvikelser (±2 min, inställda eller med störning)</label>
-      <label><input type="checkbox" id="sortByDelay"> Störst försening först</label>
+    <div class="toolbar" id="toolbar">
+      <div class="viewswitch" role="group" aria-label="Visa">
+        <button type="button" data-view="table" aria-pressed="true">Tabell</button>
+        <button type="button" data-view="lv" aria-pressed="false">Linjevy</button>
+      </div>
+      <label class="table-only"><input type="checkbox" id="onlyDeviations"> Visa bara avvikelser (±2 min, inställda eller med störning)</label>
+      <label class="table-only"><input type="checkbox" id="sortByDelay"> Störst försening först</label>
       <label class="right"><input type="checkbox" id="showLv"> Linjevy</label>
     </div>
     <div class="main" id="main">
@@ -235,6 +251,8 @@
 const REFRESH_MS = 15000;
 const CACHE_KEY = "tabellen:last";
 const LV_KEY = "tabellen:linjevy";
+const VIEW_KEY = "tabellen:vy";                   // smala skärmar: "table" eller "lv"
+const NARROW = matchMedia("(max-width: 1080px)");
 const CACHE_MAX_AGE_S = 600;
 const ROW = 30;                                   // px per station i linjevyn
 const LANE = { up: 25, down: 82 };                // x-mitt för tåg uppåt / nedåt
@@ -465,12 +483,38 @@ function vehLabel(r, pat) {
   return `Tåg ${r.train_number}, linje ${r.line} mot ${r.destination}, ${where}${d}`;
 }
 
+let narrowView = null;   // sätts vid start
+
+/* Breda skärmar: linjevy bredvid tabellen (kan stängas). Smala: växla mellan tabell och linjevy. */
+function lvVisible() { return NARROW.matches ? narrowView === "lv" : $("showLv").checked; }
+function applyLayout() {
+  const narrow = NARROW.matches, show = lvVisible();
+  $("lv").hidden = !show;
+  $("main").classList.toggle("with-lv", show && !narrow);
+  $("board").hidden = narrow && narrowView === "lv";
+  $("toolbar").classList.toggle("lv-mode", narrow && narrowView === "lv");
+  for (const b of document.querySelectorAll(".viewswitch button")) b.setAttribute("aria-pressed", String(b.dataset.view === narrowView));
+}
+function setView(view) {
+  narrowView = view;
+  store(VIEW_KEY, view);
+  renderLv();
+  const behavior = "auto";
+  if (view === "lv") centerSelectedMarker(behavior);
+  else if (selected) document.querySelector(`tr.veh[data-trip="${CSS.escape(selected)}"]`)?.scrollIntoView({ block: "center", behavior });
+}
+function centerSelectedMarker(behavior) {
+  const btn = selected && document.querySelector(`.lv-veh[data-trip="${CSS.escape(selected)}"]`);
+  if (!btn) return;
+  if (NARROW.matches) { btn.scrollIntoView({ block: "center", behavior }); return; }
+  const sc = $("lv-scroll");
+  if (sc) sc.scrollTo({ top: parseFloat(btn.style.top) - sc.clientHeight / 2, behavior });
+}
+
 function renderLv() {
   const box = $("lv");
-  const show = $("showLv").checked;
-  box.hidden = !show;
-  $("main").classList.toggle("with-lv", show);
-  if (!show || !last) return;
+  applyLayout();
+  if (!lvVisible() || !last) return;
   const tab = last.tabs[current];
   document.documentElement.style.setProperty("--line", TAB_COLOR[current] || "#1c4e80");
   const pat = currentPattern(tab);
@@ -528,7 +572,8 @@ function renderLv() {
     el("span", { class: "muted", text: sel.status === "running" && sel.next_stop
       ? `${sel.observed_stop} → ${sel.next_stop}${sel.next_expected_at ? ", förväntas " + time(sel.next_expected_at) : ""}`
       : sel.status === "terminus" ? `Vid ändhållplats ${sel.observed_stop}` : sel.observed_stop }),
-    outside.includes(sel) ? el("span", { class: "muted", text: " (kan inte placeras på linjen)" }) : null) : null;
+    outside.includes(sel) ? el("span", { class: "muted", text: " (kan inte placeras på linjen)" }) : null,
+    NARROW.matches ? el("div", {}, gotoTable()) : null) : null;
 
   box.replaceChildren(...[
     el("div", { class: "lv-head" },
@@ -542,6 +587,12 @@ function renderLv() {
     el("div", { class: "lv-scroll", id: "lv-scroll" }, track),
     outside.length ? el("p", { class: "lv-foot", text: `${outside.length} ${outside.length === 1 ? "tåg" : "tåg"} på linjen kunde inte placeras (station utanför linjens huvudsträckning).` }) : null,
   ].filter(Boolean));
+}
+
+function gotoTable() {
+  const b = el("button", { type: "button", class: "goto", text: "Visa i tabellen" });
+  b.addEventListener("click", () => setView("table"));
+  return b;
 }
 
 function lastRowById(id) {
@@ -580,12 +631,11 @@ function selectTrip(id, source) {
   renderLv();
   if (!selected) return;
   const behavior = reducedMotion ? "auto" : "smooth";
+  if (NARROW.matches) return;   // smala skärmar: bara en vy syns, den andra centreras vid växling
   if (source === "lv") {
     document.querySelector(`tr.veh[data-trip="${CSS.escape(selected)}"]`)?.scrollIntoView({ block: "center", behavior });
   } else {
-    const btn = document.querySelector(`.lv-veh[data-trip="${CSS.escape(selected)}"]`);
-    const sc = $("lv-scroll");
-    if (btn && sc) sc.scrollTo({ top: parseFloat(btn.style.top) - sc.clientHeight / 2, behavior });
+    centerSelectedMarker(behavior);
   }
 }
 
@@ -690,9 +740,12 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && last && Date.now() / 1000 - last.generated_at > REFRESH_MS / 1000) load();
 });
 
-// Linjevyn är på som standard på breda skärmar; valet sparas.
+// Breda skärmar: linjevyn är på som standard. Smala: tabellen visas först. Valen sparas.
 const savedLv = recall(LV_KEY);
-$("showLv").checked = savedLv == null ? innerWidth >= 1080 : savedLv === "1";
+$("showLv").checked = savedLv == null ? true : savedLv === "1";
+narrowView = recall(VIEW_KEY) === "lv" ? "lv" : "table";
+for (const b of document.querySelectorAll(".viewswitch button")) b.addEventListener("click", () => setView(b.dataset.view));
+NARROW.addEventListener("change", renderLv);
 // Visa senaste data från förra besöket direkt (om den är färsk nog), hämta sedan nytt.
 last = readCache();
 if (last && !Object.values(last.tabs)[0]?.lines) last = null;   // cache från äldre version
