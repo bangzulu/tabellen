@@ -11,17 +11,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: superfly/flyctl-actions/setup-flyctl@master
-      - name: DNS och HTTP
+      - name: HTTP
         run: |
           H=tabellen.fly.dev
-          for ns in 8.8.8.8 1.1.1.1; do
-            echo "::notice title=DNS $ns::A=$(dig +short A $H @$ns | tr '\n' ' ') AAAA=$(dig +short AAAA $H @$ns | tr '\n' ' ')"
+          for p in /api/health "/api/board"; do
+            out=$(curl -sS --max-time 60 -H "Accept-Encoding: gzip" --compressed -o body.txt -w "%{http_code} %{time_total}s" "https://$H$p" 2>&1)
+            echo "::notice title=HTTP $p::$out $(head -c 200 body.txt | tr '\n' ' ')"
           done
-          for p in / /api/health "/api/board?tab=PT"; do
-            out=$(curl -sS --max-time 40 -o body.txt -w "%{http_code} %{time_total}s" "https://$H$p" 2>&1)
-            echo "::notice title=HTTP $p::$out $(head -c 160 body.txt | tr '\n' ' ')"
-          done
-      - name: Fly-status
+      - name: Fly-status och loggar
         run: |
-          echo "::notice title=IPs::$(flyctl ips list -a tabellen 2>&1 | tr '\n' ' ' | head -c 500)"
-          echo "::notice title=Status::$(flyctl status -a tabellen 2>&1 | tr '\n' ' ' | head -c 600)"
+          echo "::notice title=Status::$(flyctl status -a tabellen 2>&1 | tr '\n' ' ' | head -c 900)"
+          flyctl logs -a tabellen --no-tail > logs.txt 2>&1 || true
+          tail -c 3000 logs.txt | tr '\n' '|' > l1.txt
+          tail -c 6000 logs.txt | head -c 3000 | tr '\n' '|' > l2.txt
+          echo "::notice title=Loggar (äldre)::$(cat l2.txt)"
+          echo "::notice title=Loggar (senaste)::$(cat l1.txt)"
