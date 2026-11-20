@@ -111,7 +111,8 @@
 
   /* Tabell + linjevy */
   .main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
-  .main.with-lv { grid-template-columns: minmax(0, 1fr) 330px; }
+  .main.with-lv { grid-template-columns: 330px minmax(0, 1fr); }
+  .main .lv { order: -1; }
   .board { background: var(--surface); border: 1px solid var(--rule); border-top: 0; border-radius: 0 0 6px 6px; overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; }
   th { text-align: left; font-weight: 600; color: var(--muted); font-size: .85rem; padding: 10px 12px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
@@ -193,7 +194,7 @@
 
   @media (max-width: 1080px) {
     .main.with-lv { grid-template-columns: minmax(0, 1fr); }
-    .lv { position: static; order: -1; margin-top: 12px; max-height: none; }
+    .lv { position: static; margin-top: 12px; max-height: none; }
     .lv-scroll { max-height: 55vh; }
   }
   @media (max-width: 720px) {

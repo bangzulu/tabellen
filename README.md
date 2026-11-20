@@ -50,7 +50,7 @@ störning som publiceras både på linjen och på enskilda stationer slås ihop.
 
 ## Linjevy
 
-Till höger om tabellen (ovanför på smala skärmar) ritas vald linje som en "termometer" med
+Till vänster om tabellen (ovanför på smala skärmar) ritas vald linje som en "termometer" med
 tågen mellan stationerna: ▲ uppåt, ▼ nedåt, ring i orange/rött vid försening. Positionen
 räknas fram mellan senast passerad och nästa station utifrån tiderna och flyttas mjukt.
 Klick på en rad markerar tåget i linjevyn och tvärtom; Esc avmarkerar. Flikar med flera
