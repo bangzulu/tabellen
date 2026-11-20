@@ -9,7 +9,9 @@ import csv
 import io
 import logging
 import pickle
+import sys
 import zipfile
+from array import array
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
 from pathlib import Path
@@ -32,8 +34,13 @@ class StopTime:
     dep: int | None
 
 
+NO_TIME = -1  # saknad tid i arrayerna
+
+
 @dataclass
 class Trip:
+    """Hållplatstiderna lagras kompakt (arrayer i stället för ett objekt per hållplats),
+    så att tre dygns spårtrafik ryms i en liten maskin. `stops` bygger objekten vid behov."""
     trip_id: str
     route_id: str
     line: str
@@ -42,15 +49,32 @@ class Trip:
     direction_id: int | None
     train_number: str
     service_id: str
-    stops: list[StopTime] = field(default_factory=list)
+    stop_ids: tuple[str, ...] = ()
+    seqs: array = field(default_factory=lambda: array("i"))
+    arrs: array = field(default_factory=lambda: array("i"))
+    deps: array = field(default_factory=lambda: array("i"))
+
+    @property
+    def stops(self) -> list[StopTime]:
+        return [StopTime(self.seqs[i], sid,
+                         None if self.arrs[i] == NO_TIME else self.arrs[i],
+                         None if self.deps[i] == NO_TIME else self.deps[i])
+                for i, sid in enumerate(self.stop_ids)]
+
+    def set_stops(self, rows: list[tuple[int, str, int | None, int | None]]) -> None:
+        rows.sort(key=lambda r: r[0])
+        self.stop_ids = tuple(sys.intern(r[1]) for r in rows)
+        self.seqs = array("i", (r[0] for r in rows))
+        self.arrs = array("i", (NO_TIME if r[2] is None else r[2] for r in rows))
+        self.deps = array("i", (NO_TIME if r[3] is None else r[3] for r in rows))
 
     @property
     def origin_stop_id(self) -> str | None:
-        return self.stops[0].stop_id if self.stops else None
+        return self.stop_ids[0] if self.stop_ids else None
 
     @property
     def destination_stop_id(self) -> str | None:
-        return self.stops[-1].stop_id if self.stops else None
+        return self.stop_ids[-1] if self.stop_ids else None
 
 
 @dataclass
@@ -183,33 +207,36 @@ def load_static(path: Path | None = None, dates: set[str] | None = None) -> Stat
             )
 
         # stop_times.txt är stor (alla bussar). Strömmas och filtreras.
+        pending: dict[str, list] = {}
         for st in _reader(zf, "stop_times.txt"):
-            trip = trips.get(st["trip_id"])
-            if trip is None:
+            if st["trip_id"] not in trips:
                 continue
-            trip.stops.append(StopTime(
-                seq=int(st["stop_sequence"]),
-                stop_id=st["stop_id"],
-                arr=parse_gtfs_time(st.get("arrival_time", "")),
-                dep=parse_gtfs_time(st.get("departure_time", "")),
+            pending.setdefault(st["trip_id"], []).append((
+                int(st["stop_sequence"]), st["stop_id"],
+                parse_gtfs_time(st.get("arrival_time", "")),
+                parse_gtfs_time(st.get("departure_time", "")),
             ))
-        for trip in trips.values():
-            trip.stops.sort(key=lambda s: s.seq)
+        for tid, rows in pending.items():
+            trips[tid].set_stops(rows)
+        del pending
 
-        stops_raw = {s["stop_id"]: s for s in _reader(zf, "stops.txt")}
-        stop_names = {}
-        for sid, s in stops_raw.items():
-            parent = stops_raw.get(s.get("parent_station") or "")
-            stop_names[sid] = (parent or s)["stop_name"]
+        # Bara namn och föräldrastation sparas, och bara för hållplatser med spårtrafik.
+        stops_raw = {s["stop_id"]: (s["stop_name"], s.get("parent_station") or "")
+                     for s in _reader(zf, "stops.txt")}
 
         # Vilka flikar trafikerar varje hållplats (både plattform och föräldrastation),
         # används för att koppla störningar som bara anger hållplats.
         stop_tabs: dict[str, set[str]] = {}
         for trip in trips.values():
-            for st in trip.stops:
-                for sid in (st.stop_id, stops_raw.get(st.stop_id, {}).get("parent_station")):
-                    if sid:
-                        stop_tabs.setdefault(sid, set()).add(trip.tab)
+            for sid in trip.stop_ids:
+                for key in (sid, stops_raw.get(sid, ("", ""))[1]):
+                    if key:
+                        stop_tabs.setdefault(sys.intern(key), set()).add(trip.tab)
+        stop_names = {}
+        for sid in stop_tabs:
+            name, parent = stops_raw.get(sid, (sid, ""))
+            stop_names[sid] = stops_raw[parent][0] if parent in stops_raw else name
+        del stops_raw
 
         needed = {t.service_id for t in trips.values()}
         service_dates = {k: v for k, v in service_dates.items() if k in needed}
@@ -221,7 +248,7 @@ def load_static(path: Path | None = None, dates: set[str] | None = None) -> Stat
                       stop_tabs=stop_tabs)
 
 
-CACHE_VERSION = 2  # höj när StaticData ändras
+CACHE_VERSION = 3  # höj när StaticData ändras
 
 
 def load_static_cached(dates: set[str]) -> StaticData:
