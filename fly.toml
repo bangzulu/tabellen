@@ -1,5 +1,7 @@
-# Billigast möjliga: en liten maskin i Stockholm som stängs av när ingen tittar.
-# Fakturor under 5 USD/månad efterskänks av Fly.
+# En liten maskin i Stockholm som alltid är igång, så att sidan svarar direkt
+# (ca 2 USD/månad; Fly efterskänker fakturor under 5 USD).
+# Vill du hellre att den somnar när ingen tittar: sätt min_machines_running = 0.
+# Första besöket tar då några sekunder.
 app = "tabellen"
 primary_region = "arn"
 
@@ -20,8 +22,11 @@ primary_region = "arn"
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
 
 [[vm]]
   size = "shared-cpu-1x"
   memory = "256mb"
+
+# Reserv när tidtabellen byts ut en gång per dygn (gammal och ny ligger i minnet samtidigt).
+swap_size_mb = 512

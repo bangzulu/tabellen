@@ -22,6 +22,10 @@ RT_URLS = {
 }
 
 RT_CACHE_SECONDS = int(os.getenv("RT_CACHE_SECONDS", "30"))
+# Äldre data än RT_CACHE_SECONDS men yngre än så här visas direkt medan nytt hämtas i bakgrunden.
+RT_STALE_OK_SECONDS = int(os.getenv("RT_STALE_OK_SECONDS", "300"))
+# Störningsflödet ändras långsammare, så det hämtas mer sällan (sparar kvot).
+ALERTS_CACHE_SECONDS = int(os.getenv("ALERTS_CACHE_SECONDS", "120"))
 USE_VEHICLE_POSITIONS = os.getenv("USE_VEHICLE_POSITIONS", "false").lower() == "true"
 RT_MONTHLY_BUDGET = int(os.getenv("RT_MONTHLY_BUDGET", "28000"))
 MAX_DATA_AGE_SECONDS = int(os.getenv("MAX_DATA_AGE_SECONDS", "120"))

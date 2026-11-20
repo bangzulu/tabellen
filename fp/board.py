@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import time
 from collections import Counter, defaultdict
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 from google.transit import gtfs_realtime_pb2 as rt
 
@@ -41,6 +41,7 @@ class Row:
     trip_id: str
     status: str                 # "running" | "terminus" | "cancelled"
     updated_at: int | None
+    notes: list[str] = field(default_factory=list)  # störningstexter för just den här avgången
 
 
 def _stu_time(ev) -> tuple[int | None, int | None]:
@@ -121,7 +122,8 @@ def _from_vehicle_position(trip: Trip, static: StaticData, v) -> tuple[str, str]
     return ids[i - 1], v.stop_id
 
 
-def build_rows(static: StaticData, tu_feed, vp_feed=None, now: int | None = None) -> list[Row]:
+def build_rows(static: StaticData, tu_feed, vp_feed=None, now: int | None = None,
+               notes: dict[str, list[str]] | None = None) -> list[Row]:
     now = int(now or time.time())
     vps = _vp_index(vp_feed)
     rows: list[Row] = []
@@ -214,6 +216,9 @@ def build_rows(static: StaticData, tu_feed, vp_feed=None, now: int | None = None
                         static.stop_name(hit[0]), "vehicleposition", v.timestamp or None, None, None,
                         static.stop_name(hit[1]), None, trip.train_number, trip_id, "running",
                         v.timestamp or None))
+    if notes:
+        for r in rows:
+            r.notes = notes.get(r.trip_id, [])
     return rows
 
 

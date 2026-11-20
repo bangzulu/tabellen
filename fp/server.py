@@ -1,77 +1,168 @@
-"""Flask-app. Kör: flask --app fp.server run --debug"""
+"""Flask-app. Kör: flask --app fp.server run --debug
+
+Snabbhet:
+- Tidtabellen läses in i bakgrunden direkt vid start, från pickle-cache på volymen.
+- Dygnsomladdningen sker i bakgrunden; den gamla tidtabellen används tills den nya är klar.
+- Realtidsflödena serveras från cache och förnyas i bakgrunden (se realtime.py).
+- /api/board levererar alla flikar i ett gzip-komprimerat svar som byggs en gång per
+  ny data, så flikbyten i webbläsaren inte kräver nya anrop.
+"""
 from __future__ import annotations
 
+import gzip
+import json
 import logging
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 
 from . import config
+from .alerts import build_alerts, to_json
 from .board import build_rows, group_for_tab
 from .realtime import BudgetExceeded, FeedCache
-from .static_gtfs import TZ, StaticData, load_static, window_dates
+from .static_gtfs import TZ, StaticData, load_static_cached, window_dates
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("fp")
 
 app = Flask(__name__, static_folder=str(config.ROOT / "static"), static_url_path="/static")
 feeds = FeedCache()
+_pool = ThreadPoolExecutor(max_workers=3)
+
 _static: StaticData | None = None
 _static_day: str | None = None
 _static_lock = threading.Lock()
+_static_ready = threading.Event()
+_reloading = False
+
+_board_cache: tuple[tuple, bytes, bytes] | None = None  # (nyckel, json, gzip)
+_board_lock = threading.Lock()
 
 
-def get_static() -> StaticData:
-    """Laddar om statisk data en gång per dygn (efter 07:00 hämtas ny fil)."""
-    global _static, _static_day
-    now = datetime.now(TZ)
-    day = now.strftime("%Y%m%d")
+def _load_static_now() -> None:
+    global _static, _static_day, _reloading
+    try:
+        now = datetime.now(TZ)
+        data = load_static_cached(window_dates(now))
+        with _static_lock:
+            _static, _static_day = data, now.strftime("%Y%m%d")
+        _static_ready.set()
+    except Exception:
+        log.exception("Kunde inte läsa in tidtabellen")
+    finally:
+        _reloading = False
+
+
+def _start_reload() -> None:
+    global _reloading
     with _static_lock:
-        if _static is None or (_static_day != day and now.hour >= 7):
-            _static = load_static(dates=window_dates(now))
-            _static_day = day
-        return _static
+        if _reloading:
+            return
+        _reloading = True
+    threading.Thread(target=_load_static_now, daemon=True, name="static-load").start()
+
+
+def get_static(timeout: float = 90) -> StaticData:
+    """Returnerar tidtabellen. Byter dag efter 07:00 i bakgrunden utan att blockera."""
+    now = datetime.now(TZ)
+    if _static is None:
+        _start_reload()
+        if not _static_ready.wait(timeout):
+            raise RuntimeError("Tidtabellen laddas fortfarande, försök igen om en stund.")
+    elif _static_day != now.strftime("%Y%m%d") and now.hour >= 7:
+        _start_reload()
+    if _static is None:
+        raise RuntimeError("Tidtabellen kunde inte läsas in.")
+    return _static
+
+
+# Börja läsa in tidtabellen så fort processen startar, inte vid första besöket.
+_start_reload()
+
+
+def _fetch_feeds():
+    jobs = {
+        "tu": _pool.submit(feeds.get, "TripUpdates"),
+        "sa": _pool.submit(feeds.get, "ServiceAlerts", config.ALERTS_CACHE_SECONDS,
+                           max(config.RT_STALE_OK_SECONDS, 3 * config.ALERTS_CACHE_SECONDS)),
+    }
+    if config.USE_VEHICLE_POSITIONS:
+        jobs["vp"] = _pool.submit(feeds.get, "VehiclePositions")
+    tu = jobs["tu"].result()
+    vp = jobs["vp"].result() if "vp" in jobs else None
+    try:
+        sa = jobs["sa"].result()
+    except Exception:  # störningar är ett tillägg; tabellen ska visas ändå
+        log.warning("Kunde inte hämta ServiceAlerts", exc_info=True)
+        sa = None
+    return tu, vp, sa
+
+
+def _build_payload(static: StaticData, tu, vp, sa) -> dict:
+    now = int(time.time())
+    alerts, notes = build_alerts(static, sa, now) if sa is not None else ({}, {})
+    rows = build_rows(static, tu, vp, now=now, notes=notes)
+    return {
+        "generated_at": now,
+        "feed_timestamp": tu.header.timestamp or None,
+        "alerts_timestamp": (sa.header.timestamp or None) if sa is not None else None,
+        "max_age_seconds": config.MAX_DATA_AGE_SECONDS,
+        "tabs": {
+            t["code"]: {
+                "count": sum(1 for r in rows if r.tab == t["code"]),
+                "groups": group_for_tab(rows, t["code"]),
+                "alerts": to_json(alerts.get(t["code"])),
+            }
+            for t in config.TABS
+        },
+    }
 
 
 @app.get("/")
 def index():
-    return send_from_directory(app.static_folder, "index.html")
+    resp = send_from_directory(app.static_folder, "index.html")
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 @app.get("/api/tabs")
 def tabs():
-    return jsonify([{"code": t["code"], "name": t["name"], "lines": t["lines"]} for t in config.TABS])
+    resp = jsonify([{"code": t["code"], "name": t["name"], "lines": t["lines"]} for t in config.TABS])
+    resp.headers["Cache-Control"] = "public, max-age=3600"
+    return resp
 
 
 @app.get("/api/board")
 def board():
-    tab = request.args.get("tab", "PT")
-    if tab not in config.TAB_BY_CODE:
-        return jsonify(error=f"Okänd flik: {tab}"), 400
+    global _board_cache
     try:
         static = get_static()
-        tu = feeds.get("TripUpdates")
-        vp = feeds.get("VehiclePositions") if config.USE_VEHICLE_POSITIONS else None
+        tu, vp, sa = _fetch_feeds()
     except BudgetExceeded as exc:
         return jsonify(error=str(exc), code="budget"), 503
     except Exception as exc:  # nätverk, nyckel, ogiltig fil
         log.exception("Kunde inte hämta data")
         return jsonify(error=f"Kunde inte hämta data: {exc}", code="upstream"), 502
 
-    now = int(time.time())
-    feed_ts = tu.header.timestamp or None
-    rows = build_rows(static, tu, vp, now=now)
-    return jsonify(
-        tab=tab,
-        generated_at=now,
-        feed_timestamp=feed_ts,
-        max_age_seconds=config.MAX_DATA_AGE_SECONDS,
-        stale=bool(feed_ts and now - feed_ts > config.MAX_DATA_AGE_SECONDS),
-        groups=group_for_tab(rows, tab),
-        counts={t["code"]: sum(1 for r in rows if r.tab == t["code"]) for t in config.TABS},
-    )
+    key = (id(static), id(tu), id(vp), id(sa), config.USE_SAVED_FEEDS and int(time.time() // 15))
+    with _board_lock:
+        if _board_cache is None or _board_cache[0] != key:
+            raw = json.dumps(_build_payload(static, tu, vp, sa), ensure_ascii=False,
+                             separators=(",", ":")).encode()
+            _board_cache = (key, raw, gzip.compress(raw, 6))
+        _, raw, gz = _board_cache
+
+    if "gzip" in request.headers.get("Accept-Encoding", ""):
+        resp = Response(gz, mimetype="application/json")
+        resp.headers["Content-Encoding"] = "gzip"
+    else:
+        resp = Response(raw, mimetype="application/json")
+    resp.headers["Vary"] = "Accept-Encoding"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.get("/api/health")
@@ -80,6 +171,7 @@ def health():
         rt_calls_this_month=feeds.usage.count(),
         rt_monthly_budget=config.RT_MONTHLY_BUDGET,
         rt_cache_seconds=config.RT_CACHE_SECONDS,
+        alerts_cache_seconds=config.ALERTS_CACHE_SECONDS,
         vehicle_positions=config.USE_VEHICLE_POSITIONS,
         static_loaded=_static is not None,
         static_trips=len(_static.trips) if _static else 0,

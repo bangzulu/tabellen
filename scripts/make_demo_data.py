@@ -81,6 +81,29 @@ def main():
         zf.writestr("stop_times.txt", csv([["trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence"], *stop_times]))
         zf.writestr("calendar_dates.txt", csv([["service_id", "date", "exception_type"], ["S1", sd, "1"]]))
     (out / "TripUpdates.pb").write_bytes(tu.SerializeToString())
+    sa = rt.FeedMessage()
+    sa.header.gtfs_realtime_version = "2.0"
+    sa.header.timestamp = tu.header.timestamp
+
+    def alert(aid, header, desc, route=None, trip=None, stop=None):
+        a = sa.entity.add(id=aid).alert
+        a.header_text.translation.add(text=header)
+        a.description_text.translation.add(text=desc)
+        ie = a.informed_entity.add()
+        if route:
+            ie.route_id = route
+        if stop:
+            ie.stop_id = stop
+        if trip:
+            ie.trip.trip_id = trip
+
+    alert("demo1", "Förseningar i pendeltågstrafiken",
+          "Förseningar på grund av signalfel vid Älvsjö. Räkna med längre restid.", route="R43")
+    alert("demo2", "Avstängd hiss vid Kista", "Hissen mellan plattformen och biljetthallen är avstängd.", route="R10")
+    alert("demo3", "Inställd", "Inställd mellan Stockholm City och Älvsjö på grund av växelfel.", trip="T1")
+    alert("demo4", "Främre tåg", "Främre tåg", trip="T2")  # plattformstext, ska filtreras bort
+    (out / "ServiceAlerts.pb").write_bytes(sa.SerializeToString())
+
     vp = rt.FeedMessage()
     vp.header.gtfs_realtime_version = "2.0"
     vp.header.timestamp = tu.header.timestamp

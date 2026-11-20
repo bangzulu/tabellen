@@ -33,11 +33,33 @@ Demodatan är påhittad. Flödet blir "inaktuellt" efter 2 minuter – kör skri
    Nycklarna ligger som repo-secrets `GTFS_STATIC_KEY` och `GTFS_RT_KEY`.
 5. Utveckla vidare mot sparade flöden: `USE_SAVED_FEEDS=true flask --app fp.server run --debug`
 
+## Störningar
+
+Hämtas ur GTFS-RT ServiceAlerts och visas överst i varje flik, med antal i flikens märke.
+SL:s flöde saknar effekt och allvarlighetsgrad, så `fp/alerts.py` sorterar på text och koppling:
+
+| Visas som | Vad |
+|---|---|
+| Störningar | linje- eller hållplatslarm med trafikpåverkan (inställt, ersättningsbuss, extrainsatt …) |
+| Enskilda avgångar | larm på en viss tur; texten visas också på raden i tabellen |
+| Hissar och entréer, Skyltar och övrigt | hopfällda; räknas inte i märket |
+
+Plattformsskyltens korta texter ("Främre tåg", "Ingen påstigning") filtreras bort, och samma
+störning som publiceras både på linjen och på enskilda stationer slås ihop. Interna rubriker
+("Unv-Kår", "… RP") ersätts med beskrivningens första mening.
+
+## Snabbhet
+
+- Tidtabellen sparas som pickle på volymen: omstart tar under en sekund i stället för 5–15 s.
+- Realtid och störningar hämtas parallellt. Data upp till 5 min gammal visas direkt medan
+  ny hämtas i bakgrunden.
+- `/api/board` ger alla flikar i ett komprimerat svar (~11 kB), byggt en gång per ny data.
+  Flikbyten sker utan nya anrop och senaste data visas direkt vid omladdning (localStorage).
+
 ## Drift på Fly.io
 
-`fly.toml` kör en maskin (shared-cpu-1x, 256 MB) i Stockholm som stängs av när ingen
-tittar och startar vid första anropet (några sekunders fördröjning). En volym på 1 GB
-håller tidtabellen mellan omstarter. Fakturor under 5 USD/månad efterskänks av Fly.
+`fly.toml` kör en maskin (shared-cpu-1x, 256 MB) i Stockholm som alltid är igång, ca 2 USD/månad
+(Fly efterskänker fakturor under 5 USD). En volym på 1 GB håller tidtabellen mellan omstarter.
 
 Engångsuppsättning, helt i webbläsaren:
 
@@ -47,7 +69,7 @@ Engångsuppsättning, helt i webbläsaren:
    och sidan hamnar på `https://tabellen.fly.dev`. Är namnet upptaget, byt `app` i `fly.toml`.
 
 Därefter deployas varje push till `main` automatiskt (efter att testerna gått igenom).
-Sidan är publik, men realtidsanrop cachas 30 s och stoppas vid `RT_MONTHLY_BUDGET`.
+Sidan är publik, men realtidsanrop cachas (TripUpdates 30 s, ServiceAlerts 120 s) och stoppas vid `RT_MONTHLY_BUDGET`.
 
 ## Struktur
 

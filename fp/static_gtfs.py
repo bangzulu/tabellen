@@ -8,6 +8,7 @@ from __future__ import annotations
 import csv
 import io
 import logging
+import pickle
 import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
@@ -59,6 +60,8 @@ class StaticData:
     service_dates: dict[str, set[str]]  # service_id -> {"YYYYMMDD", ...}
     routes: list[dict]  # alla rader i routes.txt, för coverage_check --routes
     loaded_from: str = ""
+    rail_routes: dict[str, tuple[str, str]] = field(default_factory=dict)  # route_id -> (linje, flik)
+    stop_tabs: dict[str, set[str]] = field(default_factory=dict)  # stop_id/parent -> flikar som stannar där
 
     def stop_name(self, stop_id: str | None) -> str:
         if not stop_id:
@@ -199,12 +202,50 @@ def load_static(path: Path | None = None, dates: set[str] | None = None) -> Stat
             parent = stops_raw.get(s.get("parent_station") or "")
             stop_names[sid] = (parent or s)["stop_name"]
 
+        # Vilka flikar trafikerar varje hållplats (både plattform och föräldrastation),
+        # används för att koppla störningar som bara anger hållplats.
+        stop_tabs: dict[str, set[str]] = {}
+        for trip in trips.values():
+            for st in trip.stops:
+                for sid in (st.stop_id, stops_raw.get(st.stop_id, {}).get("parent_station")):
+                    if sid:
+                        stop_tabs.setdefault(sid, set()).add(trip.tab)
+
         needed = {t.service_id for t in trips.values()}
         service_dates = {k: v for k, v in service_dates.items() if k in needed}
 
     log.info("Statisk data: %d turer, %d linjer", len(trips), len(routes))
     return StaticData(trips=trips, stop_names=stop_names, service_dates=service_dates,
-                      routes=all_routes, loaded_from=str(path))
+                      routes=all_routes, loaded_from=str(path),
+                      rail_routes={rid: (line, tab) for rid, (line, tab) in routes.items()},
+                      stop_tabs=stop_tabs)
+
+
+CACHE_VERSION = 2  # höj när StaticData ändras
+
+
+def load_static_cached(dates: set[str]) -> StaticData:
+    """Som load_static men sparar resultatet som pickle bredvid zip-filen.
+    Inläsning från zip tar 5–15 s, från cachen under en sekund."""
+    path = ensure_static_zip()
+    key = f"static-v{CACHE_VERSION}-{int(path.stat().st_mtime)}-{min(dates)}-{max(dates)}.pkl"
+    cache = config.DATA_DIR / key
+    if cache.exists():
+        try:
+            with cache.open("rb") as fh:
+                data = pickle.load(fh)
+            log.info("Statisk data från cache %s", key)
+            return data
+        except Exception:  # trasig eller inaktuell cache, läs om
+            log.warning("Kunde inte läsa %s, läser zip igen", key, exc_info=True)
+    data = load_static(path, dates=dates)
+    for old in config.DATA_DIR.glob("static-*.pkl"):
+        old.unlink(missing_ok=True)
+    tmp = cache.with_suffix(".tmp")
+    with tmp.open("wb") as fh:
+        pickle.dump(data, fh, protocol=pickle.HIGHEST_PROTOCOL)
+    tmp.replace(cache)
+    return data
 
 
 def today_service_date(now: datetime | None = None) -> str:
