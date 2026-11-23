@@ -264,20 +264,25 @@ def line_patterns(static: StaticData) -> dict[str, list[dict]]:
     out: dict[str, list[dict]] = defaultdict(list)
     for (tab, line), trip in best.items():
         names: list[str] = []
+        lats: list[float | None] = []
         for sid in trip.stop_ids:
             name = static.stop_name(sid)
             if not names or names[-1] != name:
                 names.append(name)
+                lat = static.stop_lat.get(sid)
+                lats.append(round(lat, 4) if lat is not None else None)
         first, last = trip.stop_ids[0], trip.stop_ids[-1]
         flip = static.stop_lat.get(first, 0) < static.stop_lat.get(last, 0)
         down = trip.direction_id
         if flip:
             names.reverse()
+            lats.reverse()
             down = None if down is None else 1 - down
         out[tab].append({
             "line": line,
             "variants": sorted(variants[(tab, line)], key=lambda x: (len(x), x)),
             "stations": names,
+            "lats": lats,                # för linjeträdet: åt vilket håll grenar ritas
             "down_direction_id": down,   # direction_id för tåg som går uppifrån och ned
         })
     for tab in out:

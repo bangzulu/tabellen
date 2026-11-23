@@ -202,9 +202,23 @@
   .lv-veh.very-late { box-shadow: 0 0 0 3px var(--very-late); }
   .lv-veh:hover { transform: scale(1.15); z-index: 3; }
   .lv-veh.selected { transform: scale(1.35); z-index: 4; box-shadow: 0 0 0 3px var(--surface), 0 0 0 6px var(--select-edge); }
+  .lt { position: relative; }
+  .lt svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .lt-path { fill: none; stroke: var(--line); stroke-width: 5; stroke-linecap: round; }
+  .lt-stn { fill: var(--dot); stroke: var(--line); stroke-width: 2.5; }
+  .lt-stn.end { stroke-width: 3; }
+  .lt-lbl { position: absolute; transform: translateY(-50%); font-size: .82rem; line-height: 1.2;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lt-lbl.left { text-align: right; }
+  .lt-lbl.end { font-weight: 800; }
+  .lt-lbl .ln { display: inline-block; font-size: .68rem; font-weight: 800; padding: 0 4px; margin: 0 0 0 4px; border-radius: 3px;
+                background: var(--line); color: #fff; vertical-align: 1px; }
+  .lt-lbl.left .ln { margin: 0 4px 0 0; }
+  .lv-veh.small { width: 18px; height: 18px; margin: -9px 0 0 -9px; font-size: 8px; border-width: 1.5px;
+                  transition: top 1.2s linear, left 1.2s linear, transform .15s; }
   .lv-foot { margin: 0; padding: 8px 12px; border-top: 1px solid var(--rule); color: var(--muted); font-size: .8rem; }
   .lv-empty { padding: 16px 12px; color: var(--muted); }
-  @media (prefers-reduced-motion: reduce) { .lv-veh { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .lv-veh, .lv-veh.small { transition: none; } }
 
   .message { padding: 32px 16px; text-align: center; color: var(--muted); }
   .message.error { color: var(--very-late); }
@@ -266,6 +280,7 @@
     Klicka på en avgång för att se den i linjevyn, eller på ett tåg i linjevyn för att hitta det i tabellen.</footer>
 </div>
 
+<script src="/static/tree.js"></script>
 <script>
 const REFRESH_MS = 15000;
 const CACHE_KEY = "tabellen:last";
@@ -503,20 +518,29 @@ function place(pat, r, now) {
   return { pos, dir };
 }
 
-function currentPattern(tab) {
+const ALL = "*";   // linjevyns läge "alla linjer" (linjeträd)
+
+/* Vald linje i linjevyn, eller ALL. Standard är trädet när fliken har flera linjer. */
+function lvSelection(tab) {
   if (!tab.lines.length) return null;
-  let line = lvLine.get(current);
-  if (!tab.lines.some((l) => l.line === line)) {
-    // standard: linjen med flest fordon
-    const counts = new Map();
-    for (const r of tabRows(tab)) { const b = baseLineOf(tab, r.line); counts.set(b, (counts.get(b) || 0) + 1); }
-    line = [...tab.lines].sort((a, b) => (counts.get(b.line) || 0) - (counts.get(a.line) || 0))[0].line;
-    lvLine.set(current, line);
-  }
-  return tab.lines.find((l) => l.line === line);
+  if (tab.lines.length === 1) return tab.lines[0].line;
+  const v = lvLine.get(current);
+  return v === ALL || tab.lines.some((l) => l.line === v) ? v : ALL;
 }
 
-function vehLabel(r, pat) {
+function currentPattern(tab) {
+  const v = lvSelection(tab);
+  return v && v !== ALL ? tab.lines.find((l) => l.line === v) : null;
+}
+
+const treeCache = new Map();
+function treeFor(tab) {
+  const key = current + ":" + tab.lines.map((l) => l.line + "/" + l.stations.join(",")).join(";");
+  if (!treeCache.has(key)) treeCache.set(key, window.LineTree.buildTree(tab.lines));
+  return treeCache.get(key);
+}
+
+function vehLabel(r) {
   const d = r.delay_min == null ? "" : r.delay_min > 0 ? `, ${r.delay_min} min sen` : r.delay_min < 0 ? `, ${-r.delay_min} min tidig` : ", i tid";
   const where = r.next_stop && r.status === "running" ? `mellan ${r.observed_stop} och ${r.next_stop}` : `vid ${r.observed_stop}`;
   return `Tåg ${r.train_number}, linje ${r.line} mot ${r.destination}, ${where}${d}`;
@@ -550,83 +574,193 @@ function centerSelectedMarker(behavior) {
   if (sc) sc.scrollTo({ top: parseFloat(btn.style.top) - sc.clientHeight / 2, behavior });
 }
 
+let lvGeom = null;   // hur tåg placeras i den vy som visas (för tickPositions)
+
+function lineCounts(tab) {
+  const counts = new Map();
+  for (const r of tabRows(tab)) if (r.status !== "cancelled") { const b = baseLineOf(tab, r.line); counts.set(b, (counts.get(b) || 0) + 1); }
+  return counts;
+}
+
 function renderLv() {
   const box = $("lv");
   applyLayout();
+  lvGeom = null;
   if (!lvVisible() || !last) return;
   const tab = last.tabs[current];
   document.documentElement.style.setProperty("--line", TAB_COLOR[current] || "#1c4e80");
-  const pat = currentPattern(tab);
+  const sel = lvSelection(tab);
   const close = el("button", { class: "lv-close", "aria-label": "Stäng linjevyn", title: "Stäng linjevyn", text: "×" });
   close.addEventListener("click", () => setLv(false));
-  if (!pat) {
+  if (!sel) {
     box.replaceChildren(el("div", { class: "lv-head" }, el("div", { class: "lv-title" }, el("strong", { text: TAB_NAMES[current] })), close),
       el("p", { class: "lv-empty", text: "Ingen linjeinformation för det här trafikslaget." }));
     return;
   }
+  const counts = lineCounts(tab);
 
+  // Linjeväljare: Alla (linjeträd) + varje linje
+  let lineButtons = null;
+  if (tab.lines.length > 1) {
+    const btn = (value, label, real, planned) => {
+      const b = el("button", { "aria-pressed": String(sel === value), title: `${real} i trafik enligt realtid, ${planned} enligt tidtabellen` },
+        label, el("span", { text: `${real} (${planned})` }));
+      b.addEventListener("click", () => { lvLine.set(current, value); renderLv(); centerSelectedMarker("auto"); });
+      return b;
+    };
+    lineButtons = el("div", { class: "lv-lines", role: "group", "aria-label": "Välj linje" },
+      btn(ALL, "Alla", tab.count, tab.planned),
+      ...tab.lines.map((l) => btn(l.line, l.line, counts.get(l.line) || 0, l.planned)));
+  }
+
+  const body = sel === ALL ? treeBody(tab) : lineBody(tab, tab.lines.find((l) => l.line === sel));
+
+  const selRow = selected && tabRows(tab).find((r) => r.trip_id === selected);
+  const selCard = selRow ? el("div", { class: "lv-sel", "aria-live": "polite" },
+    el("div", { class: "top" }, pill(selRow), el("strong", { text: `${selRow.line} ${selRow.destination}` }), el("span", { class: "muted", text: "tåg " + selRow.train_number })),
+    el("span", { class: "muted", text: selRow.status === "running" && selRow.next_stop
+      ? `${selRow.observed_stop} → ${selRow.next_stop}${selRow.next_expected_at ? ", förväntas " + time(selRow.next_expected_at) : ""}`
+      : selRow.status === "terminus" ? `Vid ändhållplats ${selRow.observed_stop}` : selRow.observed_stop }),
+    body.outside.includes(selRow) ? el("span", { class: "muted", text: " (kan inte placeras i linjevyn)" }) : null,
+    NARROW.matches ? el("div", {}, gotoTable()) : null) : null;
+
+  box.replaceChildren(...[
+    el("div", { class: "lv-head" }, ...body.head, close),
+    lineButtons,
+    selCard,
+    el("div", { class: "lv-legend" }, ...body.legend.map((t) => el("span", { text: t }))),
+    el("div", { class: "lv-scroll", id: "lv-scroll" }, body.track),
+    body.outside.length ? el("p", { class: "lv-foot", text: `${body.outside.length} tåg kunde inte placeras (station utanför linjekartan).` }) : null,
+  ].filter(Boolean));
+}
+
+function vehButton(r, x, y, dir, small) {
+  const btn = el("button", {
+    class: "lv-veh " + dir + " " + delayClass(r) + (small ? " small" : "") + (r.trip_id === selected ? " selected" : ""),
+    "data-trip": r.trip_id, style: `top:${y}px;left:${x}px`, "aria-label": vehLabel(r), title: vehLabel(r),
+    "aria-pressed": String(r.trip_id === selected),
+  }, dir === "up" ? "▲" : "▼");
+  btn.addEventListener("click", () => selectTrip(r.trip_id, "lv"));
+  return btn;
+}
+
+/* En linje: stationer i en lodrät lista, tåg i körfält till vänster (uppåt) och höger (nedåt). */
+function lineBody(tab, pat) {
   const now = Date.now() / 1000;
   const rows = tabRows(tab).filter((r) => baseLineOf(tab, r.line) === pat.line);
   const placed = [], outside = [];
   for (const r of rows) { const p = place(pat, r, now); if (p) placed.push([r, p]); else if (r.status !== "cancelled") outside.push(r); }
-
-  // Linjeväljare (flera linjer i samma flik)
-  let lineButtons = null;
-  if (tab.lines.length > 1) {
-    const counts = new Map();
-    for (const r of tabRows(tab)) if (r.status !== "cancelled") { const b = baseLineOf(tab, r.line); counts.set(b, (counts.get(b) || 0) + 1); }
-    lineButtons = el("div", { class: "lv-lines", role: "group", "aria-label": "Välj linje" }, ...tab.lines.map((l) => {
-      const b = el("button", { "aria-pressed": String(l.line === pat.line), title: `${counts.get(l.line) || 0} i trafik enligt realtid, ${l.planned} enligt tidtabellen` },
-        l.line, el("span", { text: `${counts.get(l.line) || 0} (${l.planned})` }));
-      b.addEventListener("click", () => { lvLine.set(current, l.line); renderLv(); });
-      return b;
-    }));
-  }
-
-  // Spåret
   const n = pat.stations.length;
   const track = el("div", { class: "lv-track", style: `height:${n * ROW}px` },
     el("div", { class: "lv-rail", style: `top:${ROW / 2}px;height:${(n - 1) * ROW}px` }),
     ...pat.stations.map((s, i) => el("div", { class: "lv-stn" + (i === 0 || i === n - 1 ? " end" : ""), style: `top:${i * ROW}px` },
       el("span", { text: s, title: s }))));
-
-  // Tåg; nära varandra i samma körfält förskjuts något i sidled
   const lastY = { up: [], down: [] };
   for (const [r, p] of placed.sort((a, b) => a[1].pos - b[1].pos)) {
     const y = p.pos * ROW + ROW / 2;
     const crowd = lastY[p.dir].filter((v) => Math.abs(v - y) < 20).length;
     lastY[p.dir].push(y);
-    const x = LANE[p.dir] + (p.dir === "up" ? -1 : 1) * Math.min(crowd, 2) * 7;
-    const btn = el("button", {
-      class: "lv-veh " + p.dir + " " + delayClass(r) + (r.trip_id === selected ? " selected" : ""), "data-trip": r.trip_id,
-      style: `top:${y}px;left:${x}px`, "aria-label": vehLabel(r, pat), title: vehLabel(r, pat),
-      "aria-pressed": String(r.trip_id === selected),
-    }, p.dir === "up" ? "▲" : "▼");
-    btn.addEventListener("click", () => selectTrip(r.trip_id, "lv"));
-    track.append(btn);
+    track.append(vehButton(r, LANE[p.dir] + (p.dir === "up" ? -1 : 1) * Math.min(crowd, 2) * 7, y, p.dir, false));
   }
-
-  const sel = selected && rows.find((r) => r.trip_id === selected);
-  const selCard = sel ? el("div", { class: "lv-sel", "aria-live": "polite" },
-    el("div", { class: "top" }, pill(sel), el("strong", { text: `${sel.line} ${sel.destination}` }), el("span", { class: "muted", text: "tåg " + sel.train_number })),
-    el("span", { class: "muted", text: sel.status === "running" && sel.next_stop
-      ? `${sel.observed_stop} → ${sel.next_stop}${sel.next_expected_at ? ", förväntas " + time(sel.next_expected_at) : ""}`
-      : sel.status === "terminus" ? `Vid ändhållplats ${sel.observed_stop}` : sel.observed_stop }),
-    outside.includes(sel) ? el("span", { class: "muted", text: " (kan inte placeras på linjen)" }) : null,
-    NARROW.matches ? el("div", {}, gotoTable()) : null) : null;
-
-  box.replaceChildren(...[
-    el("div", { class: "lv-head" },
-      el("span", { class: "lv-badge", text: pat.line }),
+  lvGeom = { kind: "line", pat };
+  const real = rows.filter((r) => r.status !== "cancelled").length;
+  return {
+    head: [el("span", { class: "lv-badge", text: pat.line }),
       el("div", { class: "lv-title" }, el("strong", { text: TAB_NAMES[current] }),
-        el("span", { text: `${pat.stations[0]} – ${pat.stations[n - 1]} · ${n} stationer · ${rows.filter((r) => r.status !== "cancelled").length} i trafik (${pat.planned} enligt tidtabell)` })),
-      close),
-    lineButtons,
-    selCard,
-    el("div", { class: "lv-legend" }, el("span", { text: "▲ mot " + pat.stations[0] }), el("span", { text: "▼ mot " + pat.stations[n - 1] })),
-    el("div", { class: "lv-scroll", id: "lv-scroll" }, track),
-    outside.length ? el("p", { class: "lv-foot", text: `${outside.length} ${outside.length === 1 ? "tåg" : "tåg"} på linjen kunde inte placeras (station utanför linjens huvudsträckning).` }) : null,
-  ].filter(Boolean));
+        el("span", { text: `${pat.stations[0]} – ${pat.stations[n - 1]} · ${n} stationer · ${real} i trafik (${pat.planned} enligt tidtabell)` }))],
+    legend: ["▲ mot " + pat.stations[0], "▼ mot " + pat.stations[n - 1]],
+    track, outside,
+  };
+}
+
+/* Alla linjer: schematisk karta med förgreningar (se tree.js). Namn som inte får plats
+   utelämnas men finns som verktygstips. */
+const TREE = { row: 24, col: 30, gap: 17, pad: 10 };
+let measureCtx = null;
+function textWidth(text, bold) {
+  measureCtx ||= document.createElement("canvas").getContext("2d");
+  const fam = getComputedStyle(document.body).fontFamily;
+  measureCtx.font = `${bold ? 800 : 400} 13px ${fam}`;
+  return measureCtx.measureText(text).width;
+}
+const chipLines = (tree, n) => (n.ends.size === 1 && tree.lineCount > 1 ? [...n.ends] : []);   // linjenummer vid ändstation
+function labelWidth(tree, n) { return textWidth(n.name, n.ends.size > 0) + chipLines(tree, n).length * 26 + 2; }
+
+/* Vänstermarginalen anpassas efter de namn som står till vänster, men lämnar plats åt höger. */
+function treeGeom(tree, width) {
+  const nodes = [...tree.nodes.values()];
+  const leftNeed = Math.max(0, ...nodes.filter((n) => n.label === "left").map((n) => labelWidth(tree, n)));
+  const colsW = (tree.cols - 1) * TREE.col;
+  const left = leftNeed ? Math.min(leftNeed + TREE.gap, Math.max(70, (width - colsW) * 0.52)) : 0;
+  const x0 = left + TREE.pad;
+  return { X: (c) => x0 + c * TREE.col, Y: (r) => r * TREE.row + TREE.row / 2 + 4 };
+}
+
+function treePlace(tree, g, tab, r, now) {
+  if (r.status === "cancelled") return null;
+  const a = tree.nodes.get(r.observed_stop);
+  if (!a) return null;
+  const b = r.next_stop ? tree.nodes.get(r.next_stop) : null;
+  let dir;
+  if (b && b !== a) dir = g.Y(b.row) > g.Y(a.row) ? "down" : "up";
+  else {
+    const pat = tab.lines.find((l) => l.line === baseLineOf(tab, r.line));
+    dir = pat && r.direction_id === pat.down_direction_id ? "down" : "up";
+  }
+  let pt = { x: g.X(a.col), y: g.Y(a.row) };
+  if (b && b !== a && r.status === "running") {
+    let f = 0;
+    if (r.passed_at && r.next_expected_at && r.next_expected_at > r.passed_at) f = (now - r.passed_at) / (r.next_expected_at - r.passed_at);
+    pt = window.LineTree.pointOnEdge(a, b, Math.max(0, Math.min(0.9, f)), g.X, g.Y);
+  }
+  return { x: pt.x + (dir === "up" ? -7 : 7), y: pt.y, dir };
+}
+
+function treeBody(tab) {
+  const tree = treeFor(tab);
+  const g = treeGeom(tree, ($("lv").clientWidth || 330) - 8);
+  const h = tree.rows * TREE.row + 8;
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("aria-hidden", "true");
+  for (const e of tree.edges) {
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", window.LineTree.edgePath(e.a, e.b, g.X, g.Y));
+    p.setAttribute("class", "lt-path");
+    svg.append(p);
+  }
+  const labels = [];
+  for (const n of tree.nodes.values()) {
+    const c = document.createElementNS(NS, "circle");
+    const isEnd = n.ends.size > 0;
+    c.setAttribute("cx", g.X(n.col)); c.setAttribute("cy", g.Y(n.row)); c.setAttribute("r", isEnd ? 5.5 : 4.5);
+    c.setAttribute("class", "lt-stn" + (isEnd ? " end" : ""));
+    const t = document.createElementNS(NS, "title"); t.textContent = n.name; c.append(t);
+    svg.append(c);
+    if (!n.label) continue;
+    const x = g.X(n.col), y = g.Y(n.row);
+    const style = n.label === "right" ? `top:${y}px;left:${x + TREE.gap}px;right:6px` : `top:${y}px;left:4px;width:${x - TREE.gap - 4}px`;
+    const chips = chipLines(tree, n).map((l) => el("span", { class: "ln", text: l }));
+    labels.push(el("div", { class: `lt-lbl ${n.label}${isEnd ? " end" : ""}`, style, title: n.name },
+      ...(n.label === "left" ? [...chips, " ", n.name] : [n.name, ...chips])));
+  }
+  const track = el("div", { class: "lt", style: `height:${h}px` }, svg, ...labels);
+
+  const now = Date.now() / 1000;
+  const outside = [];
+  const rows = tabRows(tab);
+  for (const r of rows) {
+    const p = treePlace(tree, g, tab, r, now);
+    if (p) track.append(vehButton(r, p.x, p.y, p.dir, true));
+    else if (r.status !== "cancelled") outside.push(r);
+  }
+  lvGeom = { kind: "tree", tree, g, tab };
+  return {
+    head: [el("div", { class: "lv-title" }, el("strong", { text: TAB_NAMES[current] }),
+      el("span", { text: `Linjerna ${tab.lines.map((l) => l.line).join(", ")} · ${tab.count} i trafik (${tab.planned} enligt tidtabell)` }))],
+    legend: ["▲ norrut", "Välj linje ovan för detaljer", "▼ söderut"],
+    track, outside,
+  };
 }
 
 function gotoTable() {
@@ -642,15 +776,18 @@ function lastRowById(id) {
 
 /* Flytta tågen mjukt mellan uppdateringarna. */
 function tickPositions() {
-  if (!last || $("lv").hidden) return;
-  const tab = last.tabs[current];
-  const pat = currentPattern(tab);
-  if (!pat) return;
+  if (!last || $("lv").hidden || !lvGeom) return;
   const now = Date.now() / 1000;
   for (const btn of document.querySelectorAll(".lv-veh")) {
     const r = lastRowById(btn.dataset.trip);
-    const p = r && place(pat, r, now);
-    if (p) btn.style.top = `${p.pos * ROW + ROW / 2}px`;
+    if (!r) continue;
+    if (lvGeom.kind === "line") {
+      const p = place(lvGeom.pat, r, now);
+      if (p) btn.style.top = `${p.pos * ROW + ROW / 2}px`;
+    } else {
+      const p = treePlace(lvGeom.tree, lvGeom.g, lvGeom.tab, r, now);
+      if (p) { btn.style.top = `${p.y}px`; btn.style.left = `${p.x}px`; }
+    }
   }
 }
 
@@ -666,7 +803,7 @@ function selectTrip(id, source) {
   selected = selected === id ? null : id;
   const tab = last?.tabs[current];
   const r = selected && tab ? tabRows(tab).find((x) => x.trip_id === selected) : null;
-  if (r) lvLine.set(current, baseLineOf(tab, r.line));
+  if (r && lvSelection(tab) !== ALL) lvLine.set(current, baseLineOf(tab, r.line));   // i trädet syns alla linjer
   applySelection();
   renderLv();
   if (!selected) return;
