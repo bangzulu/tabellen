@@ -360,13 +360,11 @@ const isShort = (real, planned) => planned - real >= 2 && (planned - real) / pla
 function renderSummary(tab) {
   const counts = new Map();
   for (const r of tabRows(tab)) if (r.status !== "cancelled") { const b = baseLineOf(tab, r.line); counts.set(b, (counts.get(b) || 0) + 1); }
-  const diff = tab.count - tab.planned;
   const stat = (label, value, cls = "") => el("div", { class: cls }, el("dt", { text: label }), el("dd", { text: value }));
   $("summary").replaceChildren(...[
     el("dl", { class: "sum-stats" },
       stat("i trafik", tab.count, isShort(tab.count, tab.planned) ? "short" : ""),
-      stat("enligt tidtabell", tab.planned),
-      stat("skillnad", diff > 0 ? "+" + diff : String(diff), isShort(tab.count, tab.planned) ? "short" : "")),
+      stat("enligt tidtabell", tab.planned)),
     tab.lines.length > 1 ? el("ul", { class: "sum-lines", "aria-label": "Per linje" }, ...tab.lines.map((l) => {
       const real = counts.get(l.line) || 0;
       return el("li", { class: isShort(real, l.planned) ? "short" : "", title: `Linje ${l.line}: ${real} i trafik, ${l.planned} enligt tidtabell` },
