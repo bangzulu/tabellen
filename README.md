@@ -61,8 +61,7 @@ färre är ute än planerat (minst 2 tåg och 15 %). Linjevyn visar samma jämf�
 Till vänster om tabellen (ovanför på smala skärmar) ritas vald linje som en "termometer" med
 tågen mellan stationerna: ▲ uppåt, ▼ nedåt, ring i orange/rött vid försening. Positionen
 räknas fram mellan senast passerad och nästa station utifrån tiderna och flyttas mjukt.
-Klick på en rad markerar tåget i linjevyn och tvärtom; Esc avmarkerar. Flikar med flera
-linjer (17/18/19) har linjeväljare. Stationsordningen kommer från linjens längsta tur
+Klick på en rad markerar tåget i linjevyn och tvärtom; Esc avmarkerar. Stationsordningen kommer från linjens längsta tur
 (`line_patterns` i `fp/board.py`), med nordligaste änden överst. Linjevyn kan stängas och
 valet sparas i webbläsaren. På smala skärmar (under 1080 px) växlar man i stället mellan
 Tabell och Linjevy med en knapp; valt tåg följer med mellan vyerna.
@@ -70,8 +69,9 @@ Tabell och Linjevy med en knapp; valt tåg följer med mellan vyerna.
 ### Linjeträd
 
 Har fliken flera linjer (pendeltåg, Roslagsbanan, tunnelbanans färger …) visar linjevyn först
-**Alla**: en schematisk karta där linjerna förgrenar sig, med alla tåg utsatta. Välj en linje
-för den detaljerade vyn. Layouten (`static/tree.js`) lägger längsta linjen som stam och övriga
+**Alla**: en schematisk karta där linjerna förgrenar sig, med tågen som små pilar (orange/röd
+vid försening). Linjeväljaren överst i fliken (Alla, 17, 18, 19 …) gäller både tabellen och
+linjevyn: väljer man en linje visar tabellen bara den och linjevyn den detaljerade vyn. Layouten (`static/tree.js`) lägger längsta linjen som stam och övriga
 sträckor som grenar i närmaste lediga kolumn, norrut eller söderut efter stationernas latitud.
 Den prövar alla val av stam och sida och väljer varianten där flest namn får plats; namn som
 inte får plats utelämnas (finns som verktygstips). Ändstationer får linjenummer.

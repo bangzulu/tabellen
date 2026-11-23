@@ -16,7 +16,7 @@
     --muted: #5d6b78;
     --rule: #dde3e8;
     --band: #eef2f5;
-    --nav: #1c4e80;
+    --nav: #0c2340;
     --nav-ink: #ffffff;
     --late: #b26a00;
     --late-bg: #fdf1dc;
@@ -33,7 +33,7 @@
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #0f1820; --surface: #16212b; --ink: #e8eef3; --muted: #9aa8b5;
-      --rule: #2a3946; --band: #1b2833; --nav: #23598f; --nav-ink: #ffffff;
+      --rule: #2a3946; --band: #1b2833; --nav: #0a2747; --nav-ink: #ffffff;
       --late: #f2b544; --late-bg: #3a2c10; --very-late: #ff8a80; --very-late-bg: #43201d;
       --ok: #8fd19e; --focus: #7cb8ee; --select-bg: #1d3550; --select-edge: #7cb8ee; --dot: #e8eef3;
       color-scheme: dark;
@@ -65,7 +65,7 @@
   }
   nav button:hover { opacity: 1; }
   nav button[aria-selected="true"] { background: var(--surface); color: var(--ink); opacity: 1; }
-  nav .tick { flex: none; width: 4px; height: 1.15em; border-radius: 2px; background: var(--c); box-shadow: 0 0 0 1px rgba(255, 255, 255, .35); }
+  nav .tick { flex: none; width: 4px; height: 1.15em; border-radius: 2px; background: var(--c); }
 
   /* Sammanfattning överst i fliken: i trafik enligt realtid mot tidtabell */
   .summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 28px; padding: 12px;
@@ -75,11 +75,18 @@
   .sum-stats dt { color: var(--muted); font-size: .8rem; }
   .sum-stats dd { margin: 0; font-size: 1.6rem; font-weight: 800; line-height: 1.1; }
   .sum-stats .short dd { color: var(--late); }
-  .sum-lines { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-  .sum-lines li { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 9px; border-radius: 4px; background: var(--band); font-size: .9rem; }
+  /* Linjeväljare: gäller både tabell och linjevy */
+  .sum-lines { display: flex; flex-wrap: wrap; gap: 6px; }
+  .sum-lines button {
+    display: inline-flex; align-items: baseline; gap: 6px; padding: 5px 11px; border-radius: 4px; cursor: pointer;
+    font: inherit; font-size: .9rem; color: var(--ink); background: var(--band); border: 1px solid transparent;
+  }
+  .sum-lines button:hover { border-color: var(--rule); }
+  .sum-lines button[aria-pressed="true"] { background: var(--line); color: #fff; }
   .sum-lines strong { font-weight: 800; }
-  .sum-lines .plan { color: var(--muted); }
-  .sum-lines li.short .plan { color: var(--late); font-weight: 700; }
+  .sum-lines .plan { opacity: .7; }
+  .sum-lines .short .plan { color: var(--late); font-weight: 700; opacity: 1; }
+  .sum-lines button[aria-pressed="true"].short .plan { color: #ffd38a; }
   @media (max-width: 720px) { nav { flex-wrap: nowrap; overflow-x: auto; } }
   nav .badge {
     min-width: 1.45em; height: 1.45em; padding: 0 4px; border-radius: 999px; font-size: .74em; font-weight: 800;
@@ -214,8 +221,17 @@
   .lt-lbl .ln { display: inline-block; font-size: .68rem; font-weight: 800; padding: 0 4px; margin: 0 0 0 4px; border-radius: 3px;
                 background: var(--line); color: #fff; vertical-align: 1px; }
   .lt-lbl.left .ln { margin: 0 4px 0 0; }
-  .lv-veh.small { width: 18px; height: 18px; margin: -9px 0 0 -9px; font-size: 8px; border-width: 1.5px;
-                  transition: top 1.2s linear, left 1.2s linear, transform .15s; }
+  /* Linjeträdet: små pilar i linjens färg; orange/röd vid försening */
+  .lv-veh.small {
+    width: 18px; height: 18px; margin: -9px 0 0 -9px; border: 0; border-radius: 50%; background: transparent;
+    color: var(--arrow, var(--line)); box-shadow: none; transition: top 1.2s linear, left 1.2s linear, transform .15s;
+  }
+  .lv-veh.small svg { width: 13px; height: 12px; overflow: visible; }
+  .lv-veh.small path { fill: currentColor; stroke: var(--surface); stroke-width: 1.4; paint-order: stroke; stroke-linejoin: round; }
+  .lv-veh.small.late { color: var(--late); box-shadow: none; }
+  .lv-veh.small.very-late { color: var(--very-late); box-shadow: none; }
+  .lv-veh.small:hover { transform: scale(1.3); }
+  .lv-veh.small.selected { transform: scale(1.6); box-shadow: none; outline: 2px solid var(--select-edge); outline-offset: 0; }
   .lv-foot { margin: 0; padding: 8px 12px; border-top: 1px solid var(--rule); color: var(--muted); font-size: .8rem; }
   .lv-empty { padding: 16px 12px; color: var(--muted); }
   @media (prefers-reduced-motion: reduce) { .lv-veh, .lv-veh.small { transition: none; } }
@@ -308,7 +324,7 @@ const SRC = {
 
 let current = null, timer = null, last = null, loading = false, lastError = null;
 let selected = null;                 // trip_id för vald avgång
-const lvLine = new Map();            // vald linje i linjevyn per flik
+const lvLine = new Map();            // vald linje (eller ALL) per flik, gemensam för tabell och linjevy
 const openAlerts = new Set();        // vilka störningar som är utfällda, överlever omritning
 const $ = (id) => document.getElementById(id);
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -380,12 +396,32 @@ function renderSummary(tab) {
     el("dl", { class: "sum-stats" },
       stat("i trafik", tab.count, isShort(tab.count, tab.planned) ? "short" : ""),
       stat("enligt tidtabell", tab.planned)),
-    tab.lines.length > 1 ? el("ul", { class: "sum-lines", "aria-label": "Per linje" }, ...tab.lines.map((l) => {
-      const real = counts.get(l.line) || 0;
-      return el("li", { class: isShort(real, l.planned) ? "short" : "", title: `Linje ${l.line}: ${real} i trafik, ${l.planned} enligt tidtabell` },
-        el("strong", { text: l.line }), el("span", { text: real }), el("span", { class: "plan", text: `(${l.planned})` }));
-    })) : null,
+    tab.lines.length > 1 ? lineSelector(tab, counts) : null,
   ].filter(Boolean));
+}
+
+/* Linjeväljare: Alla eller en linje. Styr både tabellen och linjevyn. */
+function lineSelector(tab, counts) {
+  const sel = lvSelection(tab);
+  const btn = (value, label, real, planned) => {
+    const b = el("button", { type: "button", "aria-pressed": String(sel === value), class: isShort(real, planned) ? "short" : "",
+                             title: `${value === ALL ? "Alla linjer" : "Linje " + value}: ${real} i trafik, ${planned} enligt tidtabell` },
+      el("strong", { text: label }), el("span", { text: real }), el("span", { class: "plan", text: `(${planned})` }));
+    b.addEventListener("click", () => setLine(value));
+    return b;
+  };
+  return el("div", { class: "sum-lines", role: "group", "aria-label": "Välj linje" },
+    btn(ALL, "Alla", tab.count, tab.planned),
+    ...tab.lines.map((l) => btn(l.line, l.line, counts.get(l.line) || 0, l.planned)));
+}
+
+function setLine(value) {
+  lvLine.set(current, value);
+  const tab = last?.tabs[current];
+  const r = selected && tab ? tabRows(tab).find((x) => x.trip_id === selected) : null;
+  if (r && value !== ALL && baseLineOf(tab, r.line) !== value) selected = null;   // valt tåg finns inte längre i urvalet
+  render();
+  centerSelectedMarker("auto");
 }
 
 /* ---------- Störningar ---------- */
@@ -439,6 +475,12 @@ function renderAlerts(tab) {
 
 /* ---------- Tabell ---------- */
 
+function topDestinations(rows) {
+  const c = new Map();
+  for (const r of rows) c.set(r.destination, (c.get(r.destination) || 0) + 1);
+  return [...c.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([d]) => d);
+}
+
 function renderBoard(tab) {
   const onlyDev = $("onlyDeviations").checked, byDelay = $("sortByDelay").checked;
   const thead = el("thead", {}, el("tr", {},
@@ -448,14 +490,17 @@ function renderBoard(tab) {
     el("th", { class: "t", text: "Tågnr" })));
   const tbody = el("tbody");
   let shown = 0;
+  const sel = lvSelection(tab);
+  const inSel = (r) => !sel || sel === ALL || baseLineOf(tab, r.line) === sel;
 
   for (const g of tab.groups) {
-    let rows = g.rows;
+    let rows = g.rows.filter(inSel);
+    const dests = sel && sel !== ALL ? topDestinations(rows) : g.destinations;
     if (onlyDev) rows = rows.filter((r) => r.status === "cancelled" || r.notes?.length || (r.delay_min != null && Math.abs(r.delay_min) >= 2));
     if (byDelay) rows = [...rows].sort((a, b) => (b.status === "cancelled") - (a.status === "cancelled") || (b.delay_min ?? -99) - (a.delay_min ?? -99));
     if (!rows.length) continue;
     tbody.append(el("tr", { class: "dir" }, el("td", { colspan: "8" },
-      el("strong", { text: g.label }), el("span", { text: g.destinations.length ? "mot " + g.destinations.join(", ") : "" }))));
+      el("strong", { text: g.label }), el("span", { text: dests.length ? "mot " + dests.join(", ") : "" }))));
     for (const r of rows) {
       shown++;
       const [mark, hint] = SRC[r.observed_source] || ["", ""];
@@ -588,7 +633,6 @@ function renderLv() {
   lvGeom = null;
   if (!lvVisible() || !last) return;
   const tab = last.tabs[current];
-  document.documentElement.style.setProperty("--line", TAB_COLOR[current] || "#1c4e80");
   const sel = lvSelection(tab);
   const close = el("button", { class: "lv-close", "aria-label": "Stäng linjevyn", title: "Stäng linjevyn", text: "×" });
   close.addEventListener("click", () => setLv(false));
@@ -597,22 +641,6 @@ function renderLv() {
       el("p", { class: "lv-empty", text: "Ingen linjeinformation för det här trafikslaget." }));
     return;
   }
-  const counts = lineCounts(tab);
-
-  // Linjeväljare: Alla (linjeträd) + varje linje
-  let lineButtons = null;
-  if (tab.lines.length > 1) {
-    const btn = (value, label, real, planned) => {
-      const b = el("button", { "aria-pressed": String(sel === value), title: `${real} i trafik enligt realtid, ${planned} enligt tidtabellen` },
-        label, el("span", { text: `${real} (${planned})` }));
-      b.addEventListener("click", () => { lvLine.set(current, value); renderLv(); centerSelectedMarker("auto"); });
-      return b;
-    };
-    lineButtons = el("div", { class: "lv-lines", role: "group", "aria-label": "Välj linje" },
-      btn(ALL, "Alla", tab.count, tab.planned),
-      ...tab.lines.map((l) => btn(l.line, l.line, counts.get(l.line) || 0, l.planned)));
-  }
-
   const body = sel === ALL ? treeBody(tab) : lineBody(tab, tab.lines.find((l) => l.line === sel));
 
   const selRow = selected && tabRows(tab).find((r) => r.trip_id === selected);
@@ -626,7 +654,6 @@ function renderLv() {
 
   box.replaceChildren(...[
     el("div", { class: "lv-head" }, ...body.head, close),
-    lineButtons,
     selCard,
     el("div", { class: "lv-legend" }, ...body.legend.map((t) => el("span", { text: t }))),
     el("div", { class: "lv-scroll", id: "lv-scroll" }, body.track),
@@ -634,12 +661,23 @@ function renderLv() {
   ].filter(Boolean));
 }
 
+function arrowSvg(dir) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 12 11");
+  svg.setAttribute("aria-hidden", "true");
+  const p = document.createElementNS(NS, "path");
+  p.setAttribute("d", dir === "up" ? "M6 0.5L11.5 10.5H0.5Z" : "M6 10.5L11.5 0.5H0.5Z");
+  svg.append(p);
+  return svg;
+}
+
 function vehButton(r, x, y, dir, small) {
   const btn = el("button", {
     class: "lv-veh " + dir + " " + delayClass(r) + (small ? " small" : "") + (r.trip_id === selected ? " selected" : ""),
     "data-trip": r.trip_id, style: `top:${y}px;left:${x}px`, "aria-label": vehLabel(r), title: vehLabel(r),
     "aria-pressed": String(r.trip_id === selected),
-  }, dir === "up" ? "▲" : "▼");
+  }, small ? arrowSvg(dir) : dir === "up" ? "▲" : "▼");
   btn.addEventListener("click", () => selectTrip(r.trip_id, "lv"));
   return btn;
 }
@@ -675,7 +713,7 @@ function lineBody(tab, pat) {
 
 /* Alla linjer: schematisk karta med förgreningar (se tree.js). Namn som inte får plats
    utelämnas men finns som verktygstips. */
-const TREE = { row: 24, col: 30, gap: 17, pad: 10 };
+const TREE = { row: 24, col: 30, gap: 20, pad: 10 };
 let measureCtx = null;
 function textWidth(text, bold) {
   measureCtx ||= document.createElement("canvas").getContext("2d");
@@ -713,7 +751,7 @@ function treePlace(tree, g, tab, r, now) {
     if (r.passed_at && r.next_expected_at && r.next_expected_at > r.passed_at) f = (now - r.passed_at) / (r.next_expected_at - r.passed_at);
     pt = window.LineTree.pointOnEdge(a, b, Math.max(0, Math.min(0.9, f)), g.X, g.Y);
   }
-  return { x: pt.x + (dir === "up" ? -7 : 7), y: pt.y, dir };
+  return { x: pt.x + (dir === "up" ? -9 : 9), y: pt.y, dir };
 }
 
 function treeBody(tab) {
@@ -803,7 +841,6 @@ function selectTrip(id, source) {
   selected = selected === id ? null : id;
   const tab = last?.tabs[current];
   const r = selected && tab ? tabRows(tab).find((x) => x.trip_id === selected) : null;
-  if (r && lvSelection(tab) !== ALL) lvLine.set(current, baseLineOf(tab, r.line));   // i trädet syns alla linjer
   applySelection();
   renderLv();
   if (!selected) return;
@@ -855,6 +892,9 @@ function render() {
   const tab = last.tabs[current];
   if (!tab) return;
   if (selected && !tabRows(tab).some((r) => r.trip_id === selected)) selected = null;   // tåget har försvunnit
+  document.documentElement.style.setProperty("--line", TAB_COLOR[current] || "#1c4e80");
+  // På röda linjen skulle ett rött tåg i tid se ut som kraftigt försenat: pilar i textfärg där.
+  document.documentElement.style.setProperty("--arrow", current === "TB2" ? "var(--ink)" : "var(--line)");
   renderSummary(tab);
   renderAlerts(tab);
   renderBoard(tab);
