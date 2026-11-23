@@ -173,6 +173,14 @@ def _dedupe(items: list[AlertItem]) -> list[AlertItem]:
     return [a for a, _ in kept]
 
 
+def _recency(item) -> tuple[int, int]:
+    """Nyast först. SL:s larm-id är ett löpnummer som följer skapandetiden (stämmer med
+    starttiden i ~98 % av fallen), vilket fungerar även när active_period anger en
+    planerad starttid långt bak i tiden. Starttiden används som reserv."""
+    num = int(item.id) if item.id.isdigit() else 0
+    return num, getattr(item, "since", None) or 0
+
+
 def build_alerts(static: StaticData, feed, now: int) -> tuple[dict[str, TabAlerts], dict[str, list[str]]]:
     """Returnerar (larm per flik, korta noteringar per trip_id för tabellraderna)."""
     per_tab: dict[str, dict[str, list[AlertItem]]] = {}
@@ -243,8 +251,8 @@ def build_alerts(static: StaticData, feed, now: int) -> tuple[dict[str, TabAlert
     out: dict[str, TabAlerts] = {}
     for tab in set(per_tab) | set(trips_by_tab):
         cats = per_tab.get(tab, {c: [] for c in CATEGORIES})
-        ta = TabAlerts(**{c: sorted(_dedupe(cats[c]), key=lambda x: -(x.since or 0)) for c in CATEGORIES})
-        ta.trips = sorted(trips_by_tab.get(tab, []), key=lambda x: x.departs or 0)
+        ta = TabAlerts(**{c: sorted(_dedupe(cats[c]), key=_recency, reverse=True) for c in CATEGORIES})
+        ta.trips = sorted(trips_by_tab.get(tab, []), key=_recency, reverse=True)
         out[tab] = ta
     return out, notes
 

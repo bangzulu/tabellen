@@ -21,7 +21,7 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 
 from . import config
 from .alerts import build_alerts, to_json
-from .board import build_rows, group_for_tab, line_patterns
+from .board import build_rows, group_for_tab, line_patterns, planned_counts
 from .realtime import BudgetExceeded, FeedCache
 from .static_gtfs import TZ, StaticData, load_static_cached, window_dates
 
@@ -114,6 +114,7 @@ def _build_payload(static: StaticData, tu, vp, sa) -> dict:
     patterns = _patterns_for(static)
     alerts, notes = build_alerts(static, sa, now) if sa is not None else ({}, {})
     rows = build_rows(static, tu, vp, now=now, notes=notes)
+    planned_tab, planned_line = planned_counts(static, now)
     return {
         "generated_at": now,
         "feed_timestamp": tu.header.timestamp or None,
@@ -121,10 +122,13 @@ def _build_payload(static: StaticData, tu, vp, sa) -> dict:
         "max_age_seconds": config.MAX_DATA_AGE_SECONDS,
         "tabs": {
             t["code"]: {
-                "count": sum(1 for r in rows if r.tab == t["code"]),
+                # i trafik enligt realtid (inställda räknas inte) och enligt tidtabellen
+                "count": sum(1 for r in rows if r.tab == t["code"] and r.status != "cancelled"),
+                "planned": planned_tab.get(t["code"], 0),
                 "groups": group_for_tab(rows, t["code"]),
                 "alerts": to_json(alerts.get(t["code"])),
-                "lines": patterns.get(t["code"], []),
+                "lines": [{**l, "planned": planned_line.get((t["code"], l["line"]), 0)}
+                          for l in patterns.get(t["code"], [])],
             }
             for t in config.TABS
         },

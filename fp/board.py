@@ -283,3 +283,27 @@ def line_patterns(static: StaticData) -> dict[str, list[dict]]:
     for tab in out:
         out[tab].sort(key=lambda d: (len(d["line"]), d["line"]))
     return dict(out)
+
+
+def planned_counts(static: StaticData, now: int) -> tuple[dict[str, int], dict[tuple[str, str], int]]:
+    """Antal turer som enligt tidtabellen är ute just nu (mellan första avgång och sista
+    ankomst), per flik och per (flik, grundlinje). Jämförs med realtidens antal."""
+    from . import config
+    from datetime import datetime
+
+    from .static_gtfs import NO_TIME, TZ, candidate_service_dates, service_day_start
+
+    per_tab: dict[str, int] = defaultdict(int)
+    per_line: dict[tuple[str, str], int] = defaultdict(int)
+    for sd in candidate_service_dates(datetime.fromtimestamp(now, TZ)):
+        day0 = int(service_day_start(sd).timestamp())
+        for t in static.trips.values():
+            if not t.stop_ids or sd not in static.service_dates.get(t.service_id, ()):
+                continue
+            dep = t.deps[0] if t.deps[0] != NO_TIME else t.arrs[0]
+            arr = t.arrs[-1] if t.arrs[-1] != NO_TIME else t.deps[-1]
+            if dep == NO_TIME or arr == NO_TIME or not (day0 + dep <= now <= day0 + arr):
+                continue
+            per_tab[t.tab] += 1
+            per_line[(t.tab, base_line(t.line, config.TAB_BY_CODE[t.tab]["lines"]))] += 1
+    return dict(per_tab), dict(per_line)

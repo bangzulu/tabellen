@@ -35,7 +35,8 @@ Demodatan är påhittad. Flödet blir "inaktuellt" efter 2 minuter – kör skri
 
 ## Störningar
 
-Hämtas ur GTFS-RT ServiceAlerts och visas överst i varje flik, med antal i flikens märke.
+Hämtas ur GTFS-RT ServiceAlerts och visas överst i varje flik, nyaste först, med antal i flikens märke.
+SL:s larm-id är ett löpnummer som följer skapandetiden och används för sorteringen.
 SL:s flöde saknar effekt och allvarlighetsgrad, så `fp/alerts.py` sorterar på text och koppling:
 
 | Visas som | Vad |
@@ -47,6 +48,13 @@ SL:s flöde saknar effekt och allvarlighetsgrad, så `fp/alerts.py` sorterar på
 Plattformsskyltens korta texter ("Främre tåg", "Ingen påstigning") filtreras bort, och samma
 störning som publiceras både på linjen och på enskilda stationer slås ihop. Interna rubriker
 ("Unv-Kår", "… RP") ersätts med beskrivningens första mening.
+
+## Antal i trafik
+
+Flikarna visar t.ex. `27 (28)`: tåg i trafik enligt realtid (inställda räknas inte) och inom
+parentes enligt tidtabellen, dvs. turer mellan första avgång och sista ankomst just nu
+(`planned_counts` i `fp/board.py`). Parentesen färgas när klart färre är ute än planerat
+(minst 2 tåg och 15 %). Samma jämförelse finns per linje i linjevyn.
 
 ## Linjevy
 

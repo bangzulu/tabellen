@@ -102,3 +102,20 @@ def test_title_handling():
     assert _title_and_text("Signalfel", "Signalfel. Tåg står still.", "route") == ("Signalfel", "Tåg står still.")
     t, _ = _title_and_text("Stn.medd. X", "Extrainsatta avgångar från Globen cirka kl. 22:00-23:20. Läs mer.", "stop")
     assert t == "Extrainsatta avgångar från Globen cirka kl. 22:00-23:20"
+
+
+def test_newest_alert_first(static):
+    now = to_epoch(SD, NOW_S)
+    f = _feed(now)
+    # Lägre id = äldre larm, även om dess planerade starttid är senare
+    _alert(f, "14050001000000001", "Signalfel vid City", "Signalfel. Förseningar.", routes=["R43"], start=now - 60)
+    _alert(f, "14050002000000002", "Inställda avgångar", "Inställt på grund av vagnfel.", routes=["R43"], start=now - 7200)
+    out, _ = build_alerts(static, f, now)
+    assert [a.id for a in out["PT"].traffic] == ["14050002000000002", "14050001000000001"]
+
+
+def test_planned_counts(static):
+    from fp.board import planned_counts
+    per_tab, per_line = planned_counts(static, to_epoch(SD, NOW_S))
+    assert per_tab["PT"] == 3 and per_line[("PT", "43")] == 3   # t1, t2, t3 går 13:30–13:45
+    assert per_tab["TB3"] == 1

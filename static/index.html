@@ -54,17 +54,25 @@
   .freshness { color: var(--muted); font-size: .95rem; }
   .freshness.stale { color: var(--very-late); font-weight: 600; }
 
-  nav { display: flex; gap: 2px; overflow-x: auto; background: var(--nav); border-radius: 6px 6px 0 0; padding: 4px; min-height: 52px; }
+  /* Menyn krymper med fönsterbredden så att alla flikar ryms på en rad från ca 1200 px
+     (13-tums laptop); smalare än så bryts den på två rader, på mobil scrollar den i sidled. */
+  nav { display: flex; flex-wrap: wrap; gap: 2px; background: var(--nav); border-radius: 6px 6px 0 0; padding: 4px; min-height: 48px; }
   nav button {
-    flex: 0 0 auto; border: 0; background: transparent; color: var(--nav-ink); opacity: .78;
-    font: inherit; font-weight: 600; padding: 10px 14px; border-radius: 4px; cursor: pointer; white-space: nowrap;
-    display: inline-flex; align-items: center; gap: 6px;
+    flex: 0 0 auto; border: 0; background: transparent; color: var(--nav-ink); opacity: .8;
+    font: inherit; font-weight: 600; font-size: clamp(.75rem, .3rem + .5vw, .85rem);
+    padding: 9px clamp(5px, .5vw, 10px); border-radius: 4px; cursor: pointer; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: clamp(3px, .3vw, 5px);
   }
   nav button:hover { opacity: 1; }
   nav button[aria-selected="true"] { background: var(--surface); color: var(--ink); opacity: 1; }
-  nav .n { font-weight: 400; opacity: .7; }
+  nav .tick { flex: none; width: 4px; height: 1.15em; border-radius: 2px; background: var(--c); box-shadow: 0 0 0 1px rgba(255, 255, 255, .35); }
+  nav .n { font-weight: 400; opacity: .75; }
+  nav .plan { font-size: .85em; margin-left: 2px; }
+  nav .n.short .plan { color: #ffc56b; font-weight: 700; }
+  nav button[aria-selected="true"] .n.short .plan { color: var(--late); }
+  @media (max-width: 720px) { nav { flex-wrap: nowrap; overflow-x: auto; } }
   nav .badge {
-    min-width: 1.4em; height: 1.4em; padding: 0 5px; border-radius: 999px; font-size: .78rem; font-weight: 800;
+    min-width: 1.45em; height: 1.45em; padding: 0 4px; border-radius: 999px; font-size: .74em; font-weight: 800;
     display: inline-grid; place-items: center; background: var(--late-bg); color: var(--late);
   }
 
@@ -244,6 +252,7 @@
     </div>
   </div>
   <footer>Data från Trafiklab (GTFS Regional, SL), tabell och störningar. Avvikelse i minuter: + betyder sen.
+    Antal i flikarna: tåg i trafik enligt realtid, inom parentes enligt tidtabellen.
     Klicka på en avgång för att se den i linjevyn, eller på ett tåg i linjevyn för att hitta det i tabellen.</footer>
 </div>
 
@@ -325,13 +334,22 @@ function renderTabs() {
   $("tabs").replaceChildren(...codes.map((code) => {
     const t = last?.tabs[code];
     const b = el("button", { role: "tab", "aria-selected": String(code === current), id: "tab-" + code,
-                             "aria-controls": "panel", tabindex: code === current ? "0" : "-1" }, TAB_NAMES[code] || code);
-    if (t) b.append(el("span", { class: "n", text: t.count }));
+                             "aria-controls": "panel", tabindex: code === current ? "0" : "-1" },
+      el("span", { class: "tick", style: `--c:${TAB_COLOR[code]}`, "aria-hidden": "true" }), TAB_NAMES[code] || code);
+    if (t) b.append(countEl(t.count, t.planned));
     if (t?.alerts.count) b.append(el("span", { class: "badge", text: t.alerts.count,
                                                title: t.alerts.count + " störningar", "aria-label": t.alerts.count + " störningar" }));
     b.addEventListener("click", () => select(code));
     return b;
   }));
+}
+
+/* "32 (35)": i trafik enligt realtid, inom parentes enligt tidtabellen.
+   Markeras om klart färre tåg är ute än planerat. */
+function countEl(real, planned) {
+  const short = planned - real >= 2 && (planned - real) / planned >= 0.15;
+  return el("span", { class: "n" + (short ? " short" : ""), title: `${real} i trafik enligt realtid, ${planned} enligt tidtabellen` },
+    String(real), el("span", { class: "plan", text: `(${planned})` }));
 }
 
 /* ---------- Störningar ---------- */
@@ -537,7 +555,8 @@ function renderLv() {
     const counts = new Map();
     for (const r of tabRows(tab)) if (r.status !== "cancelled") { const b = baseLineOf(tab, r.line); counts.set(b, (counts.get(b) || 0) + 1); }
     lineButtons = el("div", { class: "lv-lines", role: "group", "aria-label": "Välj linje" }, ...tab.lines.map((l) => {
-      const b = el("button", { "aria-pressed": String(l.line === pat.line) }, l.line, el("span", { text: counts.get(l.line) || 0 }));
+      const b = el("button", { "aria-pressed": String(l.line === pat.line), title: `${counts.get(l.line) || 0} i trafik enligt realtid, ${l.planned} enligt tidtabellen` },
+        l.line, el("span", { text: `${counts.get(l.line) || 0} (${l.planned})` }));
       b.addEventListener("click", () => { lvLine.set(current, l.line); renderLv(); });
       return b;
     }));
@@ -579,7 +598,7 @@ function renderLv() {
     el("div", { class: "lv-head" },
       el("span", { class: "lv-badge", text: pat.line }),
       el("div", { class: "lv-title" }, el("strong", { text: TAB_NAMES[current] }),
-        el("span", { text: `${pat.stations[0]} – ${pat.stations[n - 1]} · ${n} stationer · ${placed.length} i trafik` })),
+        el("span", { text: `${pat.stations[0]} – ${pat.stations[n - 1]} · ${n} stationer · ${rows.filter((r) => r.status !== "cancelled").length} i trafik (${pat.planned} enligt tidtabell)` })),
       close),
     lineButtons,
     selCard,
