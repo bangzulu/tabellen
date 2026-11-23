@@ -1,4 +1,4 @@
-# Fordonspositioner – öppen-data-variant
+# Läget i kollektivtrafiken
 
 En egen version av SL:s *Senast avlästa fordonspositioner* byggd på
 Trafiklabs GTFS Regional (statisk + realtid) för SL. Flask-backend, en HTML-sida utan byggsteg.
