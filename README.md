@@ -51,10 +51,10 @@ störning som publiceras både på linjen och på enskilda stationer slås ihop.
 
 ## Antal i trafik
 
-Flikarna visar t.ex. `27 (28)`: tåg i trafik enligt realtid (inställda räknas inte) och inom
-parentes enligt tidtabellen, dvs. turer mellan första avgång och sista ankomst just nu
-(`planned_counts` i `fp/board.py`). Parentesen färgas när klart färre är ute än planerat
-(minst 2 tåg och 15 %). Samma jämförelse finns per linje i linjevyn.
+Överst i varje flik visas tåg i trafik enligt realtid (inställda räknas inte), antal enligt
+tidtabellen (turer mellan första avgång och sista ankomst just nu, `planned_counts` i
+`fp/board.py`) och skillnaden, samt samma jämförelse per linje. Siffrorna färgas när klart
+färre är ute än planerat (minst 2 tåg och 15 %). Linjevyn visar samma jämförelse per linje.
 
 ## Linjevy
 
