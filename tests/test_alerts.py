@@ -119,3 +119,16 @@ def test_planned_counts(static):
     per_tab, per_line = planned_counts(static, to_epoch(SD, NOW_S))
     assert per_tab["PT"] == 3 and per_line[("PT", "43")] == 3   # t1, t2, t3 går 13:30–13:45
     assert per_tab["TB3"] == 1
+
+
+def test_general_information_is_not_a_disruption(static):
+    now = to_epoch(SD, NOW_S)
+    f = _feed(now)
+    _alert(f, "1", "Trygghetsutrop ombord. Dagtid varje dag",
+           "Om du känner dig otrygg eller ser någon som behöver hjälp, chatta med vår trygghetscentral i SL-appen.",
+           routes=["R43"])
+    _alert(f, "2", "Ingen trafik mellan Odenplan och City", "Byt till buss.", routes=["R43"])
+    out, _ = build_alerts(static, f, now)
+    assert [a.id for a in out["PT"].info] == ["1"]
+    assert [a.id for a in out["PT"].traffic] == ["2"]
+    assert out["PT"].count == 1

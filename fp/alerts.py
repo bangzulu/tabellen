@@ -15,10 +15,16 @@ from dataclasses import asdict, dataclass, field
 from .static_gtfs import StaticData, to_epoch
 
 ACCESS_RE = re.compile(r"\b(hiss\w*|rulltrapp\w*|entré\w*|uppgång\w*|utgång\w*|trapp\w*|ramp\w*)\b", re.I)
-INFO_RE = re.compile(r"\b(skylt\w*|högtalar\w*|utrop\w*|informationssystem\w*|display\w*)\b", re.I)
+# Allmän information som aldrig är en trafikstörning (trygghetsutrop, halka, påminnelser)
+INFO_RE = re.compile(
+    r"\b(skylt\w*|högtalar\w*|utrop\w*|informationssystem\w*|display\w*|trygghet\w*|otrygg\w*|"
+    r"halka|hala plattformar|halt på)\b", re.I)
+# Ord som visar att trafiken påverkas. Ett larm utan något av dem räknas inte som störning.
 TRAFFIC_RE = re.compile(
-    r"inställ|försen|ersätt|stopp|trafikeras|fel\b|växelfel|signalfel|vagnfel|vagnbrist|en vagn|"
-    r"kortare tåg|extrainsatt|stannar inte|vänder|byte|glesare|färre|olycka|obehörig|broöppning",
+    r"inställ|försen|ersätt|stopp|trafik|fel\b|växelfel|signalfel|spårfel|vagnfel|vagnbrist|en vagn|"
+    r"kortare tåg|extrainsatt|stannar inte|stannar ej|vänder|byte|byt till|glesare|färre|tätare|"
+    r"olycka|obehörig|polis|sjukdomsfall|strömavbrott|broöppning|omled|indrag|kör inte|går inte|"
+    r"längre restid|ny avgångstid|avstängt mellan|ingen trafik",
     re.I,
 )
 INTERNAL_HEADER_RE = re.compile(r"(\bRP\)?\s*$|^Stn\.?\s*medd)", re.I)
@@ -86,8 +92,10 @@ def _is_display_text(header: str, desc: str) -> bool:
 
 def _category(header: str, desc: str, level: str) -> str:
     """Rubriken avgör först. I beskrivningen väger trafikord tyngre än 'skyltar', eftersom
-    trafikmeddelanden ofta hänvisar till skyltarna. Hållplatslarm utan trafikord
-    ('Det kan vara halt på plattformen') räknas som övrigt."""
+    trafikmeddelanden ofta hänvisar till skyltarna. Larm utan något trafikord
+    ('Trygghetsutrop ombord', 'Det kan vara halt på plattformen') räknas som övrigt.
+    SL:s flöde har orsak (cause) men den är OTHER_CAUSE även för vanliga förseningar,
+    och effekt saknas, så texten är det enda som skiljer."""
     if ACCESS_RE.search(header):
         return "access"
     if INFO_RE.search(header):
@@ -98,9 +106,7 @@ def _category(header: str, desc: str, level: str) -> str:
         return "access"
     if TRAFFIC_RE.search(desc):
         return "traffic"
-    if INFO_RE.search(desc) or level == "stop":
-        return "info"
-    return "traffic"
+    return "info"
 
 
 def _trip_departure(static: StaticData, trip, start_date: str, now: int) -> tuple[int | None, int | None]:

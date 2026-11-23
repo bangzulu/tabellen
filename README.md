@@ -45,6 +45,10 @@ SL:s flöde saknar effekt och allvarlighetsgrad, så `fp/alerts.py` sorterar på
 | Enskilda avgångar | larm på en viss tur; texten visas också på raden i tabellen |
 | Hissar och entréer, Skyltar och övrigt | hopfällda; räknas inte i märket |
 
+Ett larm räknas bara som störning om texten innehåller trafikord (inställt, försenat, ersättningsbuss,
+extrainsatt, ingen trafik …); allmän information som trygghetsutrop och halka hamnar under övrigt.
+Flödets `cause` hjälper inte (OTHER_CAUSE även för förseningar) och `effect` saknas.
+
 Plattformsskyltens korta texter ("Främre tåg", "Ingen påstigning") filtreras bort, och samma
 störning som publiceras både på linjen och på enskilda stationer slås ihop. Interna rubriker
 ("Unv-Kår", "… RP") ersätts med beskrivningens första mening.
