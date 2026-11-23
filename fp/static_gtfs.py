@@ -78,6 +78,33 @@ class Trip:
 
 
 @dataclass
+class BusData:
+    """Bussar, kompakt: bara det som behövs för översikten (ingen hållplatstid per tur).
+    Förseningen kommer direkt ur realtidsflödet, positionen från senast passerade hållplats."""
+    areas: list[str] = field(default_factory=list)          # områdesnamn, index = area-id
+    route_ids: list[str] = field(default_factory=list)
+    route_index: dict[str, int] = field(default_factory=dict)
+    lines: list[str] = field(default_factory=list)          # linjenummer per linjeindex
+    kinds: list[str] = field(default_factory=list)          # blåbuss, Närtrafiken, Ersättningsbuss eller ""
+    home_area: list[int] = field(default_factory=list)      # område där linjen har flest hållplatsbesök
+    services: list[str] = field(default_factory=list)
+    trip_index: dict[str, int] = field(default_factory=dict)
+    trip_route: array = field(default_factory=lambda: array("i"))
+    trip_service: array = field(default_factory=lambda: array("i"))
+    trip_dep: array = field(default_factory=lambda: array("i"))   # första avgång (s från tjänstedygnets start)
+    trip_arr: array = field(default_factory=lambda: array("i"))   # sista ankomst
+    stop_index: dict[str, int] = field(default_factory=dict)
+    stop_name: list[str] = field(default_factory=list)
+    stop_lat: array = field(default_factory=lambda: array("f"))
+    stop_lon: array = field(default_factory=lambda: array("f"))
+    stop_area: array = field(default_factory=lambda: array("h"))
+
+
+def is_bus_route_type(route_type: int) -> bool:
+    return route_type == 3 or 700 <= route_type <= 799
+
+
+@dataclass
 class StaticData:
     trips: dict[str, Trip]
     stop_names: dict[str, str]
@@ -87,6 +114,7 @@ class StaticData:
     rail_routes: dict[str, tuple[str, str]] = field(default_factory=dict)  # route_id -> (linje, flik)
     stop_tabs: dict[str, set[str]] = field(default_factory=dict)  # stop_id/parent -> flikar som stannar där
     stop_lat: dict[str, float] = field(default_factory=dict)  # för att lägga norr överst i linjevyn
+    bus: BusData = field(default_factory=BusData)
 
     def stop_name(self, stop_id: str | None) -> str:
         if not stop_id:
@@ -176,9 +204,16 @@ def load_static(path: Path | None = None, dates: set[str] | None = None) -> Stat
 
         all_routes = list(_reader(zf, "routes.txt"))
         routes: dict[str, tuple[str, str]] = {}  # route_id -> (line, tab)
+        bus = BusData()
         for r in all_routes:
             rtype = int(r.get("route_type") or 0)
             line = (r.get("route_short_name") or "").strip()
+            if is_bus_route_type(rtype):
+                bus.route_index[r["route_id"]] = len(bus.route_ids)
+                bus.route_ids.append(r["route_id"])
+                bus.lines.append(line)
+                bus.kinds.append((r.get("route_desc") or "").strip())
+                continue
             if not config.is_rail_route_type(rtype):
                 continue
             tab = config.LINE_TO_TAB.get(line)
@@ -186,10 +221,22 @@ def load_static(path: Path | None = None, dates: set[str] | None = None) -> Stat
                 routes[r["route_id"]] = (line, tab)
 
         trips: dict[str, Trip] = {}
+        service_idx: dict[str, int] = {}
         for t in _reader(zf, "trips.txt"):
-            if t["route_id"] not in routes:
-                continue
             if dates is not None and t["service_id"] not in service_dates:
+                continue
+            ridx = bus.route_index.get(t["route_id"])
+            if ridx is not None:
+                if t["service_id"] not in service_idx:
+                    service_idx[t["service_id"]] = len(bus.services)
+                    bus.services.append(t["service_id"])
+                bus.trip_index[t["trip_id"]] = len(bus.trip_route)
+                bus.trip_route.append(ridx)
+                bus.trip_service.append(service_idx[t["service_id"]])
+                bus.trip_dep.append(NO_TIME)
+                bus.trip_arr.append(NO_TIME)
+                continue
+            if t["route_id"] not in routes:
                 continue
             line, tab = routes[t["route_id"]]
             direction = t.get("direction_id")
@@ -207,9 +254,46 @@ def load_static(path: Path | None = None, dates: set[str] | None = None) -> Stat
                 service_id=t["service_id"],
             )
 
-        # stop_times.txt är stor (alla bussar). Strömmas och filtreras.
+        # Hållplatser: namn, förälder, koordinater
+        stops_raw = {s["stop_id"]: (s["stop_name"], s.get("parent_station") or "", s.get("stop_lat") or "",
+                                    s.get("stop_lon") or "")
+                     for s in _reader(zf, "stops.txt")}
+
+        from .areas import area_of
+        area_idx: dict[str, int] = {}
+
+        def bus_stop(sid: str) -> int:
+            i = bus.stop_index.get(sid)
+            if i is None:
+                name, parent, lat, lon = stops_raw.get(sid, (sid, "", "", ""))
+                lat_f, lon_f = float(lat or 0), float(lon or 0)
+                area = area_of(lat_f, lon_f) if lat else "Okänt område"
+                if area not in area_idx:
+                    area_idx[area] = len(bus.areas)
+                    bus.areas.append(area)
+                i = bus.stop_index[sys.intern(sid)] = len(bus.stop_name)
+                bus.stop_name.append(sys.intern(stops_raw[parent][0] if parent in stops_raw else name))
+                bus.stop_lat.append(lat_f)
+                bus.stop_lon.append(lon_f)
+                bus.stop_area.append(area_idx[area])
+            return i
+
+        # stop_times.txt är stor (alla bussar). Strömmas; spårturer sparas med tider,
+        # bussturer bara med första/sista tid och vilka områden linjen trafikerar.
         pending: dict[str, list] = {}
+        route_area_visits: dict[tuple[int, int], int] = {}
         for st in _reader(zf, "stop_times.txt"):
+            bi = bus.trip_index.get(st["trip_id"])
+            if bi is not None:
+                dep = parse_gtfs_time(st.get("departure_time", "")) or parse_gtfs_time(st.get("arrival_time", ""))
+                arr = parse_gtfs_time(st.get("arrival_time", "")) or dep
+                if dep is not None and (bus.trip_dep[bi] == NO_TIME or dep < bus.trip_dep[bi]):
+                    bus.trip_dep[bi] = dep
+                if arr is not None and arr > bus.trip_arr[bi]:
+                    bus.trip_arr[bi] = arr
+                key = (bus.trip_route[bi], bus.stop_area[bus_stop(st["stop_id"])])
+                route_area_visits[key] = route_area_visits.get(key, 0) + 1
+                continue
             if st["trip_id"] not in trips:
                 continue
             pending.setdefault(st["trip_id"], []).append((
@@ -221,21 +305,25 @@ def load_static(path: Path | None = None, dates: set[str] | None = None) -> Stat
             trips[tid].set_stops(rows)
         del pending
 
-        # Bara namn och föräldrastation sparas, och bara för hållplatser med spårtrafik.
-        stops_raw = {s["stop_id"]: (s["stop_name"], s.get("parent_station") or "", s.get("stop_lat") or "")
-                     for s in _reader(zf, "stops.txt")}
+        # Linjens hemområde: där den har flest hållplatsbesök
+        best: dict[int, tuple[int, int]] = {}
+        for (ridx, aidx), n in route_area_visits.items():
+            if ridx not in best or n > best[ridx][1]:
+                best[ridx] = (aidx, n)
+        bus.home_area = [best.get(i, (-1, 0))[0] for i in range(len(bus.route_ids))]
+        del route_area_visits
 
         # Vilka flikar trafikerar varje hållplats (både plattform och föräldrastation),
         # används för att koppla störningar som bara anger hållplats.
         stop_tabs: dict[str, set[str]] = {}
         for trip in trips.values():
             for sid in trip.stop_ids:
-                for key in (sid, stops_raw.get(sid, ("", "", ""))[1]):
+                for key in (sid, stops_raw.get(sid, ("", "", "", ""))[1]):
                     if key:
                         stop_tabs.setdefault(sys.intern(key), set()).add(trip.tab)
         stop_names, stop_lat = {}, {}
         for sid in stop_tabs:
-            name, parent, lat = stops_raw.get(sid, (sid, "", ""))
+            name, parent, lat, _lon = stops_raw.get(sid, (sid, "", "", ""))
             stop_names[sid] = stops_raw[parent][0] if parent in stops_raw else name
             try:
                 stop_lat[sid] = float(lat)
@@ -243,17 +331,18 @@ def load_static(path: Path | None = None, dates: set[str] | None = None) -> Stat
                 pass
         del stops_raw
 
-        needed = {t.service_id for t in trips.values()}
+        needed = {t.service_id for t in trips.values()} | set(bus.services)
         service_dates = {k: v for k, v in service_dates.items() if k in needed}
 
-    log.info("Statisk data: %d turer, %d linjer", len(trips), len(routes))
+    log.info("Statisk data: %d spårturer, %d linjer; %d bussturer, %d busslinjer, %d busshållplatser",
+             len(trips), len(routes), len(bus.trip_route), len(bus.route_ids), len(bus.stop_name))
     return StaticData(trips=trips, stop_names=stop_names, service_dates=service_dates,
                       routes=all_routes, loaded_from=str(path),
                       rail_routes={rid: (line, tab) for rid, (line, tab) in routes.items()},
-                      stop_tabs=stop_tabs, stop_lat=stop_lat)
+                      stop_tabs=stop_tabs, stop_lat=stop_lat, bus=bus)
 
 
-CACHE_VERSION = 4  # höj när StaticData ändras
+CACHE_VERSION = 5  # höj när StaticData ändras
 
 
 def load_static_cached(dates: set[str]) -> StaticData:

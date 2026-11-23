@@ -22,6 +22,7 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 from . import config
 from .alerts import build_alerts, to_json
 from .board import build_rows, group_for_tab, line_patterns, planned_counts
+from .bus import build_bus_overview
 from .realtime import BudgetExceeded, FeedCache
 from .static_gtfs import TZ, StaticData, load_static_cached, window_dates
 
@@ -40,6 +41,8 @@ _reloading = False
 
 _board_cache: tuple[tuple, bytes, bytes] | None = None  # (nyckel, json, gzip)
 _patterns: tuple[int, dict] | None = None  # (id(static), linjemönster)
+_bus_cache: tuple[tuple, dict, bytes, bytes] | None = None  # (nyckel, data, json, gzip)
+_bus_lock = threading.Lock()
 _board_lock = threading.Lock()
 
 
@@ -102,6 +105,18 @@ def _fetch_feeds():
     return tu, vp, sa
 
 
+def _bus_for(static: StaticData, tu, sa) -> tuple[dict, bytes, bytes]:
+    """Bussöversikten byggs en gång per nytt realtidsflöde och delas av /api/board och /api/bus."""
+    global _bus_cache
+    key = (id(static), id(tu), id(sa), config.USE_SAVED_FEEDS and int(time.time() // 15))
+    with _bus_lock:
+        if _bus_cache is None or _bus_cache[0] != key:
+            data = build_bus_overview(static, tu, sa)
+            raw = json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode()
+            _bus_cache = (key, data, raw, gzip.compress(raw, 6))
+        return _bus_cache[1], _bus_cache[2], _bus_cache[3]
+
+
 def _patterns_for(static: StaticData) -> dict:
     global _patterns
     if _patterns is None or _patterns[0] != id(static):
@@ -115,11 +130,18 @@ def _build_payload(static: StaticData, tu, vp, sa) -> dict:
     alerts, notes = build_alerts(static, sa, now) if sa is not None else ({}, {})
     rows = build_rows(static, tu, vp, now=now, notes=notes)
     planned_tab, planned_line = planned_counts(static, now)
+    try:
+        bus, _, _ = _bus_for(static, tu, sa)
+        bus_issues = sum(1 for a in bus["areas"] if a["status"] != "normal")
+    except Exception:
+        log.exception("Bussöversikten kunde inte byggas")
+        bus_issues = None
     return {
         "generated_at": now,
         "feed_timestamp": tu.header.timestamp or None,
         "alerts_timestamp": (sa.header.timestamp or None) if sa is not None else None,
         "max_age_seconds": config.MAX_DATA_AGE_SECONDS,
+        "bus_issues": bus_issues,   # antal busområden med förseningar (märke på Buss-fliken)
         "tabs": {
             t["code"]: {
                 # i trafik enligt realtid (inställda räknas inte) och enligt tidtabellen
@@ -169,6 +191,27 @@ def board():
             _board_cache = (key, raw, gzip.compress(raw, 6))
         _, raw, gz = _board_cache
 
+    if "gzip" in request.headers.get("Accept-Encoding", ""):
+        resp = Response(gz, mimetype="application/json")
+        resp.headers["Content-Encoding"] = "gzip"
+    else:
+        resp = Response(raw, mimetype="application/json")
+    resp.headers["Vary"] = "Accept-Encoding"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.get("/api/bus")
+def bus_overview():
+    try:
+        static = get_static()
+        tu, _vp, sa = _fetch_feeds()
+        _, raw, gz = _bus_for(static, tu, sa)
+    except BudgetExceeded as exc:
+        return jsonify(error=str(exc), code="budget"), 503
+    except Exception as exc:
+        log.exception("Kunde inte bygga bussöversikten")
+        return jsonify(error=f"Kunde inte hämta data: {exc}", code="upstream"), 502
     if "gzip" in request.headers.get("Accept-Encoding", ""):
         resp = Response(gz, mimetype="application/json")
         resp.headers["Content-Encoding"] = "gzip"

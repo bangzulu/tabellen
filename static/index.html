@@ -28,6 +28,7 @@
     --select-edge: #1c4e80;
     --dot: #ffffff;
     --line: #1c4e80;            /* sätts per flik från JS */
+    --land: #eef1f4; --land-edge: #c3ccd5; --water: #dbe7f1; --bus-ok: #6b7f93;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
@@ -36,6 +37,7 @@
       --rule: #2a3946; --band: #1b2833; --nav: #0a2747; --nav-ink: #ffffff;
       --late: #f2b544; --late-bg: #3a2c10; --very-late: #ff8a80; --very-late-bg: #43201d;
       --ok: #8fd19e; --focus: #7cb8ee; --select-bg: #1d3550; --select-edge: #7cb8ee; --dot: #e8eef3;
+      --land: #1b2833; --land-edge: #34485a; --water: #0d1820; --bus-ok: #8aa0b5;
       color-scheme: dark;
     }
   }
@@ -70,7 +72,7 @@
   /* Sammanfattning överst i fliken: i trafik enligt realtid mot tidtabell */
   .summary { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 28px; padding: 12px;
              background: var(--surface); border: 1px solid var(--rule); border-top: 0; }
-  .sum-stats { display: flex; gap: 24px; margin: 0; }
+  .sum-stats { display: flex; flex-wrap: wrap; gap: 8px 24px; margin: 0; }
   .sum-stats div { display: flex; flex-direction: column-reverse; }
   .sum-stats dt { color: var(--muted); font-size: .8rem; }
   .sum-stats dd { margin: 0; font-size: 1.6rem; font-weight: 800; line-height: 1.1; }
@@ -242,7 +244,75 @@
 
   /* Växel Tabell/Linjevy, bara på smala skärmar */
   .viewswitch { display: none; }
+  /* ---------- Bussöversikt ---------- */
+  .bv { background: var(--surface); border: 1px solid var(--rule); border-top: 0; border-radius: 0 0 6px 6px; padding: 12px; }
+  .bv-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 24px; margin-bottom: 12px; }
+  .bv-updated { color: var(--muted); font-size: .85rem; }
+  .bv-brief { border-left: 4px solid var(--nav); background: var(--band); border-radius: 0 4px 4px 0; padding: 10px 14px; margin-bottom: 14px; max-width: 95ch; }
+  .bv-brief-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+  .bv-brief h2, .bv-hotspots h2 { font-size: 1rem; font-weight: 800; margin: 0; }
+  .bv-brief p { margin: 0 0 4px; }
+  .bv-copy, .bv-more, .bv-seg button {
+    font: inherit; font-size: .85rem; font-weight: 700; padding: 4px 10px; border-radius: 4px; cursor: pointer;
+    border: 1px solid var(--rule); background: var(--surface); color: var(--ink);
+  }
+  .bv-seg { display: inline-flex; gap: 4px; }
+  .bv-seg button[aria-pressed="true"] { background: var(--nav); border-color: var(--nav); color: #fff; }
+  .bv-grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 16px; align-items: start; }
+  .bv-map { position: sticky; top: 12px; }
+  .bv-map-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px 12px; margin-bottom: 6px; }
+  .bv-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); font-size: .8rem; }
+  .bv-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .bv-legend .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+  .bv-legend .dot.ok { background: var(--bus-ok); } .bv-legend .dot.late { background: var(--late); } .bv-legend .dot.very { background: var(--very-late); }
+  .bv-legend .ring { width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--very-late); display: inline-block; }
+  .bv-svg { width: 100%; height: auto; display: block; background: var(--water); border-radius: 6px; border: 1px solid var(--rule); }
+  .bv-area { fill: var(--land); stroke: var(--land-edge); stroke-width: .8; cursor: pointer; }
+  .bv-area:hover { stroke: var(--ink); stroke-width: 1.4; }
+  .bv-area.minor { fill: var(--late-bg); stroke: var(--late); }
+  .bv-area.major { fill: var(--very-late-bg); stroke: var(--very-late); }
+  .bv-bus { stroke: none; pointer-events: none; }
+  .bv-bus.ok { fill: var(--bus-ok); } .bv-bus.late { fill: var(--late); } .bv-bus.very { fill: var(--very-late); }
+  .bv-hot { fill: none; stroke: var(--very-late); stroke-width: 2.2; }
+  .bv-label { font-size: 11px; font-weight: 700; fill: var(--muted); paint-order: stroke; stroke: var(--land); stroke-width: 3px; cursor: pointer; }
+  .bv-label.minor { fill: var(--late); font-size: 12.5px; }
+  .bv-label.major { fill: var(--very-late); font-size: 13.5px; font-weight: 800; }
+  .bv-areas { overflow-x: auto; }
+  .bv-areas table { width: 100%; border-collapse: collapse; }
+  .bv-areas th { font-size: .8rem; }
+  .bv-areas td { padding: 8px 8px; }
+  .bv-row { cursor: pointer; }
+  .bv-row:hover td { background: var(--band); }
+  .bv-row.open td { background: var(--select-bg); }
+  .bv-name { font: inherit; font-weight: 700; color: var(--ink); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+  .bv-pill { display: inline-block; font-size: .75rem; font-weight: 800; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
+  .bv-pill.major { background: var(--very-late-bg); color: var(--very-late); }
+  .bv-pill.minor { background: var(--late-bg); color: var(--late); }
+  .bv-pill.normal { color: var(--muted); }
+  .bv-sparkcell { display: inline-flex; align-items: center; gap: 6px; }
+  .bv-spark path { fill: none; stroke: var(--ink); stroke-width: 1.6; }
+  .bv-spark .ref { stroke: var(--late); stroke-dasharray: 2 2; stroke-width: 1; }
+  .bv-trend { font-size: .8rem; font-weight: 800; }
+  .bv-trend.up { color: var(--very-late); } .bv-trend.down { color: var(--ok); }
+  .bv-detail td { background: var(--select-bg); padding: 4px 12px 14px; border-bottom: 2px solid var(--rule); }
+  .bv-facts { margin: 6px 0; font-size: .92rem; }
+  .bv-facts .warn { color: var(--late); }
+  .bv-lines { width: auto; min-width: 60%; margin: 6px 0 8px; font-size: .9rem; background: var(--surface); border-radius: 4px; }
+  .bv-lines th, .bv-lines td { padding: 4px 10px; }
+  .bv-sub h4 { margin: 8px 0 2px; font-size: .88rem; }
+  .bv-sub ul, .bv-planned ul { margin: 0; padding-left: 1.2em; font-size: .9rem; }
+  .bv-sub li { margin-bottom: 3px; }
+  .bv-planned summary { cursor: pointer; color: var(--muted); font-weight: 600; font-size: .88rem; margin-top: 8px; }
+  .bv-more { margin: 10px 0 0; }
+  .bv-calm { color: var(--muted); }
+  .bv-hotspots { margin-top: 16px; }
+  .bv-hotspots ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+  .bv-hotspots li { border: 1px solid var(--rule); border-left: 4px solid var(--very-late); border-radius: 0 4px 4px 0; padding: 8px 10px; cursor: pointer; }
+  .bv-hotspots li:hover { background: var(--band); }
+  .muted { color: var(--muted); }
   @media (max-width: 1080px) {
+    .bv-grid { grid-template-columns: minmax(0, 1fr); }
+    .bv-map { position: static; }
     .toolbar .right { display: none; }
     .viewswitch { display: flex; width: 100%; padding: 3px; gap: 3px; border-radius: 6px; background: var(--band); }
     .viewswitch button {
@@ -264,6 +334,8 @@
     .trip-alerts .tnr { display: none; }
     .alert .body { padding-left: 12px; }
     .toolbar .right { margin-left: 0; }
+    .sum-stats { gap: 8px 18px; }
+    .sum-stats dd { font-size: 1.3rem; }
   }
 </style>
 </head>
@@ -287,6 +359,7 @@
       <label class="table-only"><input type="checkbox" id="sortByDelay"> Störst försening först</label>
       <label class="right"><input type="checkbox" id="showLv"> Linjevy</label>
     </div>
+    <section class="bv" id="bus" aria-label="Bussar: läget per område" hidden></section>
     <div class="main" id="main">
       <div class="board" id="board"><div class="message">Hämtar…</div></div>
       <aside class="lv" id="lv" aria-label="Linjevy" hidden></aside>
@@ -297,6 +370,7 @@
 </div>
 
 <script src="/static/tree.js"></script>
+<script src="/static/bus.js"></script>
 <script>
 const REFRESH_MS = 15000;
 const CACHE_KEY = "tabellen:last";
@@ -312,9 +386,9 @@ const fmtSec = new Intl.DateTimeFormat("sv-SE", { hour: "2-digit", minute: "2-di
 const fmtDay = new Intl.DateTimeFormat("sv-SE", { day: "numeric", month: "short", timeZone: TZ });
 const fmtYmd = new Intl.DateTimeFormat("sv-SE", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: TZ });
 const TAB_NAMES = { PT: "Pendeltåg", RB: "Roslagsbanan", TVB: "Tvärbanan", SB: "Saltsjöbanan", LB: "Lidingöbanan",
-                    SpvC: "Linje 7", TB1: "Gröna linjen", TB2: "Röda linjen", TB3: "Blå linjen" };
+                    SpvC: "Linje 7", TB1: "Gröna linjen", TB2: "Röda linjen", TB3: "Blå linjen", BUS: "Buss" };
 const TAB_COLOR = { PT: "#c8327a", RB: "#7d4a9e", TVB: "#c26a12", SB: "#12858c", LB: "#7a5b4e",
-                    SpvC: "#66707a", TB1: "#2c8a40", TB2: "#cc2f27", TB3: "#1f6fb2" };
+                    SpvC: "#66707a", TB1: "#2c8a40", TB2: "#cc2f27", TB3: "#1f6fb2", BUS: "#9fb4c8" };
 const SRC = {
   "tripupdate": ["", ""],
   "tripupdate-inferred": ["≈", "Härledd: flödet saknar passerade hållplatser"],
@@ -371,12 +445,14 @@ function pill(row) {
 /* ---------- Flikar ---------- */
 
 function renderTabs() {
-  const codes = last ? Object.keys(last.tabs) : Object.keys(TAB_NAMES);
+  const codes = last ? [...Object.keys(last.tabs), "BUS"] : Object.keys(TAB_NAMES);
   $("tabs").replaceChildren(...codes.map((code) => {
     const t = last?.tabs[code];
     const b = el("button", { role: "tab", "aria-selected": String(code === current), id: "tab-" + code,
                              "aria-controls": "panel", tabindex: code === current ? "0" : "-1" },
       el("span", { class: "tick", style: `--c:${TAB_COLOR[code]}`, "aria-hidden": "true" }), TAB_NAMES[code] || code);
+    if (code === "BUS" && last?.bus_issues) b.append(el("span", { class: "badge", text: last.bus_issues,
+      title: last.bus_issues + " områden med förseningar", "aria-label": last.bus_issues + " områden med förseningar" }));
     if (t?.alerts.count) b.append(el("span", { class: "badge", text: t.alerts.count,
                                                title: t.alerts.count + " störningar", "aria-label": t.alerts.count + " störningar" }));
     b.addEventListener("click", () => select(code));
@@ -888,6 +964,10 @@ function renderFreshness() {
 
 function render() {
   renderTabs();
+  const isBus = current === "BUS";
+  for (const id of ["summary", "alerts", "toolbar", "main"]) $(id).hidden = isBus;
+  $("bus").hidden = !isBus;
+  if (isBus) { window.BusView.render(); renderFreshness(); return; }
   if (!last) { renderLv(); return; }
   const tab = last.tabs[current];
   if (!tab) return;
@@ -935,6 +1015,7 @@ function select(code, focus = false) {
   if (code !== current) selected = null;
   current = code;
   history.replaceState(null, "", "#" + code);
+  if (code === "BUS") window.BusView.start(); else window.BusView.stop();
   render();   // data för alla flikar finns redan, inget nytt anrop behövs
   if (focus) $("tab-" + code)?.focus();
 }

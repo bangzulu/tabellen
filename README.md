@@ -80,6 +80,29 @@ sträckor som grenar i närmaste lediga kolumn, norrut eller söderut efter stat
 Den prövar alla val av stam och sida och väljer varianten där flest namn får plats; namn som
 inte får plats utelämnas (finns som verktygstips). Ändstationer får linjenummer.
 
+## Bussar
+
+Fliken **Buss** är en översikt för trafikinformatörer, inte en avgångstabell (`fp/bus.py`,
+`static/bus.js`). Bussarna grupperas per område: kommun, med Stockholms stad uppdelad i
+Innerstaden, Västerort och Söderort (`fp/areas.py`, gränser i `static/kommuner.geojson` från
+okfse/sweden-geojson, ursprungligen Valmyndighetens data).
+
+- **Realtid:** varje bussturs försening och var den är (senast passerade hållplats).
+- **Tidtabell:** hur många turer som borde vara ute; per område och linje syns hur många som
+  har realtid, så att inställda turer och saknad data märks.
+- **Störningsmeddelanden:** larm på enskilda turer räknas per område och orsak
+  (framkomlighetsproblem, köer, fordonsfel …). Linje- och hållplatsmeddelanden från de
+  senaste 3 timmarna visas som nya, äldre som planerade ändringar.
+- **Läge per område:** *Förseningar* / *Stora förseningar* när andelen bussar minst 5 min sena
+  sticker ut både mot fasta gränser och mot hela länet, när många är minst 10 min sena, eller
+  vid många larm eller inställda turer (`status_of`).
+- **Brännpunkter:** rutor på ca 1 × 1 km med minst tre sena bussar, namngivna efter vanligaste
+  hållplatsen.
+- **Läget just nu:** några meningar att läsa upp eller kopiera.
+- **Karta:** kommuner färgade efter läget, bussarna som prickar och brännpunkter som ringar.
+
+Bussdatan kommer ur samma flöden som tabellen, så den kostar inga extra API-anrop.
+
 ## Snabbhet
 
 - Tidtabellen sparas som pickle på volymen: omstart tar under en sekund i stället för 5–15 s.
