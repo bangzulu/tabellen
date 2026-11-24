@@ -14,7 +14,7 @@ jobs:
       - name: HTTP
         run: |
           H=tabellen.fly.dev
-          for p in /api/health "/api/board" "/api/board" /api/health; do
+          for p in /api/health "/api/board" "/api/bus" /; do
             out=$(curl -sS --max-time 100 -H "Accept-Encoding: gzip" --compressed -o body.txt -w "%{http_code} %{time_total}s" "https://$H$p" 2>&1)
             echo "::notice title=HTTP $p::$out $(head -c 200 body.txt | tr '\n' ' ')"
           done
