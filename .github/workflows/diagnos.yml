@@ -30,11 +30,19 @@ jobs:
               a = t["alerts"]
               tr = "; ".join(("AKUT " if x["acute"] else "plan ") + x["title"][:60] for x in a["traffic"])
               print(f"::notice title={c} märke {a['count']}::{tr} | hiss {len(a['access'])} | övr {len(a['info'])} | turer {len(a['trips'])}")
-          for m in d["overview"]["modes"]:
-              print(f"::notice title=Läge {m['code']}::{m['status']} {m['count']}/{m['planned']} sena3 {m['late3']} sena5 {m['late5']} max {m['max']}")
+
+          PY
+      - name: Läge per trafikslag
+        run: |
+          python3 - <<'PY'
+          import json
+          d = json.load(open("board.json"))
+          print("::notice title=Läge::" + " | ".join(f"{m['code']} {m['status']} {m['count']}/{m['planned']} s3 {m['late3']} s5 {m['late5']} max {m['max']}" for m in d["overview"]["modes"]))
           b = d["tabs"].get("BAT")
           if b:
-              print("::notice title=Båtlinjer::" + "; ".join(f"{l['line']} {l.get('planned')}" for l in b["lines"]))
+              print("::notice title=Båtlinjer::" + "; ".join(f"{l['line']} {l.get('count', '?')}/{l.get('planned')}" for l in b["lines"]))
+              a = b["alerts"]
+              print("::notice title=Båtstörningar::" + "; ".join(x["title"][:50] for x in a["traffic"] + a["info"]) + f" | turer {len(a['trips'])}")
           PY
       - name: Fly-status och loggar
         run: |
