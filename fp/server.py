@@ -177,6 +177,13 @@ def index():
     return resp
 
 
+@app.get("/favicon.ico")
+def favicon():
+    resp = send_from_directory(app.static_folder, "favicon-32.png", mimetype="image/png")
+    resp.headers["Cache-Control"] = "public, max-age=86400"
+    return resp
+
+
 @app.get("/api/tabs")
 def tabs():
     resp = jsonify([{"code": t["code"], "name": t["name"], "lines": t["lines"]} for t in config.TABS])
