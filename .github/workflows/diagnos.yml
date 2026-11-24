@@ -20,7 +20,7 @@ jobs:
           done
       - name: Störningar per flik
         run: |
-          sleep 70  # SL Deviations hämtas högst en gång per minut efter start
+          sleep 60  # SL Deviations hämtas högst en gång per minut efter start
           curl -sS --max-time 100 --compressed "https://tabellen.fly.dev/api/board" -o board.json
           python3 - <<'PY'
           import json
@@ -30,6 +30,11 @@ jobs:
               a = t["alerts"]
               tr = "; ".join(("AKUT " if x["acute"] else "plan ") + x["title"][:60] for x in a["traffic"])
               print(f"::notice title={c} märke {a['count']}::{tr} | hiss {len(a['access'])} | övr {len(a['info'])} | turer {len(a['trips'])}")
+          for m in d["overview"]["modes"]:
+              print(f"::notice title=Läge {m['code']}::{m['status']} {m['count']}/{m['planned']} sena3 {m['late3']} sena5 {m['late5']} max {m['max']}")
+          b = d["tabs"].get("BAT")
+          if b:
+              print("::notice title=Båtlinjer::" + "; ".join(f"{l['line']} {l.get('planned')}" for l in b["lines"]))
           PY
       - name: Fly-status och loggar
         run: |
