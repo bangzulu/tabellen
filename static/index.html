@@ -244,6 +244,33 @@
 
   /* Växel Tabell/Linjevy, bara på smala skärmar */
   .viewswitch { display: none; }
+  /* ---------- Översikt ---------- */
+  .ov { background: var(--surface); border: 1px solid var(--rule); border-top: 0; border-radius: 0 0 6px 6px; padding: 12px; }
+  .ov-brief { max-width: none; }
+  .ov-sections { columns: 3 320px; column-gap: 20px; }
+  .ov-group h2 { font-size: .95rem; font-weight: 800; margin: 6px 0 8px; color: var(--muted); }
+  .ov-group { min-width: 0; break-inside: avoid; margin-bottom: 12px; }
+  .ov-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .ov-card {
+    display: flex; flex-direction: column; gap: 4px; width: 100%; text-align: left; font: inherit; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--rule); border-left: 4px solid var(--rule); border-radius: 0 6px 6px 0;
+    padding: 10px 12px; cursor: pointer; min-width: 0; overflow: hidden;
+  }
+  .ov-card:hover { background: var(--band); }
+  .ov-card.minor { border-left-color: var(--late); }
+  .ov-card.major { border-left-color: var(--very-late); background: color-mix(in srgb, var(--very-late-bg) 45%, var(--surface)); }
+  .ov-top { display: flex; align-items: center; gap: 8px; }
+  .ov-top strong { font-size: 1.05rem; font-weight: 800; flex: 1; }
+  .ov-top .tick { flex: none; width: 4px; height: 1.1em; border-radius: 2px; background: var(--c); }
+  .ov-nums b { font-size: 1.15rem; font-weight: 800; }
+  .ov-nums b.warn { color: var(--late); }
+  .ov-facts { color: var(--muted); font-size: .9rem; }
+  .ov-alerts { display: grid; gap: 2px; margin-top: 2px; }
+  .ov-alert { font-size: .92rem; font-weight: 600; }
+  .ov-alert::before { content: "▲ "; color: var(--late); font-size: .75em; }
+  .ov-card.major .ov-alert::before, .ov-alert.major::before { color: var(--very-late); }
+  .ov-planned { display: block; max-width: 100%; color: var(--muted); font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
   /* ---------- Bussöversikt ---------- */
   .bv { background: var(--surface); border: 1px solid var(--rule); border-top: 0; border-radius: 0 0 6px 6px; padding: 12px; }
   .bv-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 24px; margin-bottom: 12px; }
@@ -359,6 +386,7 @@
       <label class="table-only"><input type="checkbox" id="sortByDelay"> Störst försening först</label>
       <label class="right"><input type="checkbox" id="showLv"> Linjevy</label>
     </div>
+    <section class="ov" id="overview" aria-label="Översikt över alla trafikslag" hidden></section>
     <section class="bv" id="bus" aria-label="Bussar: läget per område" hidden></section>
     <div class="main" id="main">
       <div class="board" id="board"><div class="message">Hämtar…</div></div>
@@ -385,7 +413,7 @@ const fmt = new Intl.DateTimeFormat("sv-SE", { hour: "2-digit", minute: "2-digit
 const fmtSec = new Intl.DateTimeFormat("sv-SE", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: TZ });
 const fmtDay = new Intl.DateTimeFormat("sv-SE", { day: "numeric", month: "short", timeZone: TZ });
 const fmtYmd = new Intl.DateTimeFormat("sv-SE", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: TZ });
-const TAB_NAMES = { PT: "Pendeltåg", RB: "Roslagsbanan", TVB: "Tvärbanan", SB: "Saltsjöbanan", LB: "Lidingöbanan",
+const TAB_NAMES = { OVR: "Översikt", PT: "Pendeltåg", RB: "Roslagsbanan", TVB: "Tvärbanan", SB: "Saltsjöbanan", LB: "Lidingöbanan",
                     SpvC: "Linje 7", TB1: "Gröna linjen", TB2: "Röda linjen", TB3: "Blå linjen", BUS: "Buss" };
 const TAB_COLOR = { PT: "#c8327a", RB: "#7d4a9e", TVB: "#c26a12", SB: "#12858c", LB: "#7a5b4e",
                     SpvC: "#66707a", TB1: "#2c8a40", TB2: "#cc2f27", TB3: "#1f6fb2", BUS: "#9fb4c8" };
@@ -445,12 +473,13 @@ function pill(row) {
 /* ---------- Flikar ---------- */
 
 function renderTabs() {
-  const codes = last ? [...Object.keys(last.tabs), "BUS"] : Object.keys(TAB_NAMES);
+  const codes = last ? ["OVR", ...Object.keys(last.tabs), "BUS"] : Object.keys(TAB_NAMES);
   $("tabs").replaceChildren(...codes.map((code) => {
     const t = last?.tabs[code];
     const b = el("button", { role: "tab", "aria-selected": String(code === current), id: "tab-" + code,
                              "aria-controls": "panel", tabindex: code === current ? "0" : "-1" },
-      el("span", { class: "tick", style: `--c:${TAB_COLOR[code]}`, "aria-hidden": "true" }), TAB_NAMES[code] || code);
+      TAB_COLOR[code] ? el("span", { class: "tick", style: `--c:${TAB_COLOR[code]}`, "aria-hidden": "true" }) : null,
+      TAB_NAMES[code] || code);
     if (code === "BUS" && last?.bus_issues) b.append(el("span", { class: "badge", text: last.bus_issues,
       title: last.bus_issues + " områden med förseningar", "aria-label": last.bus_issues + " områden med förseningar" }));
     if (t?.alerts.count) b.append(el("span", { class: "badge", text: t.alerts.count,
@@ -949,6 +978,77 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && selected) { selected = null; applySelection(); renderLv(); }
 });
 
+/* ---------- Översikt (landningssida) ---------- */
+
+const OV_STATUS = {
+  rail: { major: "Stora störningar", minor: "Störningar", normal: "Normal trafik" },
+  bus: { major: "Stora förseningar", minor: "Förseningar", normal: "Normal trafik" },
+};
+const nfSv = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 1 });
+
+function copyButton(getText) {
+  const b = el("button", { type: "button", class: "bv-copy", text: "Kopiera" });
+  b.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText(getText()); b.textContent = "Kopierat"; }
+    catch (e) { b.textContent = "Kunde inte kopiera"; }
+    setTimeout(() => (b.textContent = "Kopiera"), 2000);
+  });
+  return b;
+}
+
+function ovCard(code, statusText, status, ...body) {
+  const card = el("button", { type: "button", class: "ov-card " + status, style: `--c:${TAB_COLOR[code]}`,
+                              "aria-label": `${TAB_NAMES[code]}: ${statusText}. Öppna ${TAB_NAMES[code]}.` },
+    el("span", { class: "ov-top" }, el("span", { class: "tick", "aria-hidden": "true" }), el("strong", { text: TAB_NAMES[code] }),
+      el("span", { class: "bv-pill " + status, text: statusText })),
+    ...body);
+  card.addEventListener("click", () => { select(code); scrollTo({ top: 0 }); });
+  return card;
+}
+
+function railCard(m) {
+  const facts = [];
+  if (m.late5) facts.push(`${m.late5} minst 5 min sen${m.late5 > 1 ? "a" : "t"}`);
+  else if (m.late3) facts.push(`${m.late3} minst 3 min sen${m.late3 > 1 ? "a" : "t"}`);
+  if (m.max != null && m.max >= 3) facts.push(`max ${Math.round(m.max)} min`);
+  if (m.cancelled) facts.push(`${m.cancelled} inställd${m.cancelled > 1 ? "a" : ""}`);
+  const short = isShort(m.count, m.planned);
+  return ovCard(m.code, OV_STATUS.rail[m.status], m.status,
+    el("span", { class: "ov-nums" }, el("b", { class: short ? "warn" : "", text: m.count }), " i trafik ",
+      el("span", { class: "muted", text: `(${m.planned} enligt tidtabell)` })),
+    el("span", { class: "ov-facts", text: facts.length ? facts.join(" · ") : "Inga förseningar att tala om" }),
+    m.alerts.length ? el("span", { class: "ov-alerts" }, ...m.alerts.map((a) =>
+      el("span", { class: "ov-alert" }, a.title, a.until ? el("span", { class: "muted", text: ` · till ${time(a.until)}` }) : null))) : null,
+    m.planned_count ? el("span", { class: "ov-planned", title: m.planned_changes.map((x) => x.title).join("\n") },
+      `Planerat: ${m.planned_changes[0].title}` + (m.planned_count > 1 ? ` (+${m.planned_count - 1})` : "")) : null);
+}
+
+function busCard(b) {
+  return ovCard("BUS", OV_STATUS.bus[b.status], b.status,
+    el("span", { class: "ov-nums" }, el("b", { text: nfSv.format(b.count) }), " i trafik ",
+      el("span", { class: "muted", text: `(${nfSv.format(b.planned)} enligt tidtabell)` })),
+    el("span", { class: "ov-facts", text: [`${Math.round(b.share5 * 100)} % minst 5 min sena`, b.avg != null ? `snitt ${nfSv.format(b.avg)} min` : null,
+      b.cancelled ? `${b.cancelled} inställda turer` : null].filter(Boolean).join(" · ") }),
+    b.areas.length ? el("span", { class: "ov-alerts" }, ...b.areas.map((a) =>
+      el("span", { class: "ov-alert " + a.status }, a.name, a.reason ? el("span", { class: "muted", text: ` · ${a.reason}` }) : null))) : null,
+    b.hotspots.length ? el("span", { class: "ov-planned", text: "Flest sena kring " + b.hotspots.join(", ") }) : null);
+}
+
+function renderOverview() {
+  const box = $("overview");
+  if (!last?.overview) { box.replaceChildren(el("div", { class: "message", text: "Hämtar läget…" })); return; }
+  const o = last.overview;
+  const byCode = Object.fromEntries(o.modes.map((m) => [m.code, m]));
+  const sections = o.groups.map((g) => el("section", { class: "ov-group" }, el("h2", { text: g.name }),
+    el("div", { class: "ov-cards" }, ...g.codes.map((c) => byCode[c] && railCard(byCode[c])).filter(Boolean))));
+  if (o.bus) sections.push(el("section", { class: "ov-group" }, el("h2", { text: "Buss" }), el("div", { class: "ov-cards" }, busCard(o.bus))));
+  box.replaceChildren(
+    el("section", { class: "bv-brief ov-brief", "aria-label": "Läget just nu" },
+      el("div", { class: "bv-brief-head" }, el("h2", { text: "Läget just nu" }), copyButton(() => o.brief.join(" "))),
+      ...o.brief.map((t) => el("p", { text: t }))),
+    el("div", { class: "ov-sections" }, ...sections));
+}
+
 /* ---------- Övrigt ---------- */
 
 function renderFreshness() {
@@ -964,10 +1064,12 @@ function renderFreshness() {
 
 function render() {
   renderTabs();
-  const isBus = current === "BUS";
-  for (const id of ["summary", "alerts", "toolbar", "main"]) $(id).hidden = isBus;
+  const isBus = current === "BUS", isOv = current === "OVR";
+  for (const id of ["summary", "alerts", "toolbar", "main"]) $(id).hidden = isBus || isOv;
   $("bus").hidden = !isBus;
+  $("overview").hidden = !isOv;
   if (isBus) { window.BusView.render(); renderFreshness(); return; }
+  if (isOv) { renderOverview(); renderFreshness(); return; }
   if (!last) { renderLv(); return; }
   const tab = last.tabs[current];
   if (!tab) return;
@@ -1011,7 +1113,7 @@ async function load() {
 }
 
 function select(code, focus = false) {
-  if (!TAB_NAMES[code]) code = "PT";
+  if (!TAB_NAMES[code]) code = "OVR";   // landningssidan är standard
   if (code !== current) selected = null;
   current = code;
   history.replaceState(null, "", "#" + code);

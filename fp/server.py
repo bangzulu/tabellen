@@ -23,6 +23,7 @@ from . import config
 from .alerts import build_alerts, to_json
 from .board import build_rows, group_for_tab, line_patterns, planned_counts
 from .bus import build_bus_overview
+from .overview import build_overview
 from .realtime import BudgetExceeded, FeedCache
 from .static_gtfs import TZ, StaticData, load_static_cached, window_dates
 
@@ -135,13 +136,14 @@ def _build_payload(static: StaticData, tu, vp, sa) -> dict:
         bus_issues = sum(1 for a in bus["areas"] if a["status"] != "normal")
     except Exception:
         log.exception("Bussöversikten kunde inte byggas")
-        bus_issues = None
+        bus, bus_issues = None, None
     return {
         "generated_at": now,
         "feed_timestamp": tu.header.timestamp or None,
         "alerts_timestamp": (sa.header.timestamp or None) if sa is not None else None,
         "max_age_seconds": config.MAX_DATA_AGE_SECONDS,
         "bus_issues": bus_issues,   # antal busområden med förseningar (märke på Buss-fliken)
+        "overview": build_overview(rows, alerts, planned_tab, bus, now),
         "tabs": {
             t["code"]: {
                 # i trafik enligt realtid (inställda räknas inte) och enligt tidtabellen

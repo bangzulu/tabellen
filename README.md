@@ -53,6 +53,21 @@ Plattformsskyltens korta texter ("Främre tåg", "Ingen påstigning") filtreras 
 störning som publiceras både på linjen och på enskilda stationer slås ihop. Interna rubriker
 ("Unv-Kår", "… RP") ersätts med beskrivningens första mening.
 
+## Översikt (startsida)
+
+Fliken **Översikt** är standard och visar ett kort per trafikslag, grupperat i tunnelbana,
+pendeltåg, lokalbanor och spårväg samt buss (`fp/overview.py`), och överst några meningar att
+läsa upp eller kopiera. Läget för spårtrafiken:
+
+- **Stora störningar:** minst 30 % av tågen minst 5 min sena, eller minst 4 inställda avgångar.
+- **Störningar:** en akut trafikstörning i störningsflödet, någon inställd avgång, minst 20 %
+  minst 3 min sena, något tåg minst 10 min sent, eller klart färre tåg med realtid än planerat.
+
+En störning räknas som akut om den gäller i högst 12 timmar (t.ex. 09:45–12:00). Meddelanden som
+gäller i dagar eller månader är planerade ändringar: de visas på kortet men påverkar inte läget
+(SL publicerar om dem varje dag, så publiceringstiden säger inget). Bussens läge kommer från
+bussöversikten.
+
 ## Antal i trafik
 
 Överst i varje flik visas tåg i trafik enligt realtid (inställda räknas inte), antal enligt
