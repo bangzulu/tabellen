@@ -20,7 +20,7 @@ jobs:
           done
       - name: Störningar per flik
         run: |
-          sleep 70  # SL Deviations hämtas högst en gång per minut efter start
+          sleep 75  # SL Deviations hämtas högst en gång per minut efter start
           curl -sS --max-time 100 --compressed "https://tabellen.fly.dev/api/board" -o board.json
           python3 - <<'PY'
           import json
