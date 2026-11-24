@@ -156,7 +156,7 @@
 
   /* Tabell + linjevy */
   .main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
-  .main.with-lv { grid-template-columns: 330px minmax(0, 1fr); }
+  .main.with-lv { grid-template-columns: 384px minmax(0, 1fr); }
   .main .lv { order: -1; }
   .board { background: var(--surface); border: 1px solid var(--rule); border-top: 0; border-radius: 0 0 6px 6px; overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; }
@@ -246,7 +246,7 @@
   /* Linjeträdet: små pilar i linjens färg; orange/röd vid försening */
   .lv-veh.small {
     width: 18px; height: 18px; margin: -9px 0 0 -9px; border: 0; border-radius: 50%; background: transparent;
-    color: var(--arrow, var(--line)); box-shadow: none; transition: top 1.2s linear, left 1.2s linear, transform .15s;
+    color: var(--line); box-shadow: none; transition: top 1.2s linear, left 1.2s linear, transform .15s;
   }
   .lv-veh.small svg { width: 13px; height: 12px; overflow: visible; }
   .lv-veh.small path { fill: currentColor; stroke: var(--surface); stroke-width: 1.4; paint-order: stroke; stroke-linejoin: round; }
@@ -847,7 +847,7 @@ function lineBody(tab, pat) {
 
 /* Alla linjer: schematisk karta med förgreningar (se tree.js). Namn som inte får plats
    utelämnas men finns som verktygstips. */
-const TREE = { row: 24, col: 30, gap: 20, pad: 10 };
+const TREE = { row: 24, col: 40, gap: 29, pad: 16, veh: 14 };   // veh: tågpilens avstånd från linjen
 let measureCtx = null;
 function textWidth(text, bold) {
   measureCtx ||= document.createElement("canvas").getContext("2d");
@@ -885,12 +885,12 @@ function treePlace(tree, g, tab, r, now) {
     if (r.passed_at && r.next_expected_at && r.next_expected_at > r.passed_at) f = (now - r.passed_at) / (r.next_expected_at - r.passed_at);
     pt = window.LineTree.pointOnEdge(a, b, Math.max(0, Math.min(0.9, f)), g.X, g.Y);
   }
-  return { x: pt.x + (dir === "up" ? -9 : 9), y: pt.y, dir };
+  return { x: pt.x + (dir === "up" ? -TREE.veh : TREE.veh), y: pt.y, dir };
 }
 
 function treeBody(tab) {
   const tree = treeFor(tab);
-  const g = treeGeom(tree, ($("lv").clientWidth || 330) - 8);
+  const g = treeGeom(tree, ($("lv").clientWidth || 384) - 8);
   const h = tree.rows * TREE.row + 8;
   const NS = "http://www.w3.org/2000/svg";
   const svg = document.createElementNS(NS, "svg");
@@ -1015,16 +1015,6 @@ const OV_STATUS = {
 };
 const nfSv = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 1 });
 
-function copyButton(getText) {
-  const b = el("button", { type: "button", class: "bv-copy", text: "Kopiera" });
-  b.addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText(getText()); b.textContent = "Kopierat"; }
-    catch (e) { b.textContent = "Kunde inte kopiera"; }
-    setTimeout(() => (b.textContent = "Kopiera"), 2000);
-  });
-  return b;
-}
-
 function ovCard(code, statusText, status, ...body) {
   const card = el("button", { type: "button", class: "ov-card " + status, style: `--c:${TAB_COLOR[code]}`,
                               "aria-label": `${TAB_NAMES[code]}: ${statusText}. Öppna ${TAB_NAMES[code]}.` },
@@ -1073,7 +1063,7 @@ function renderOverview() {
   if (o.bus) sections.push(el("section", { class: "ov-group" }, el("h2", { text: "Buss" }), el("div", { class: "ov-cards" }, busCard(o.bus))));
   box.replaceChildren(
     el("section", { class: "bv-brief ov-brief", "aria-label": "Läget just nu" },
-      el("div", { class: "bv-brief-head" }, el("h2", { text: "Läget just nu" }), copyButton(() => o.brief.join(" "))),
+      el("div", { class: "bv-brief-head" }, el("h2", { text: "Läget just nu" })),
       ...o.brief.map((t) => el("p", { text: t }))),
     el("div", { class: "ov-sections" }, ...sections));
 }
@@ -1104,8 +1094,6 @@ function render() {
   if (!tab) return;
   if (selected && !tabRows(tab).some((r) => r.trip_id === selected)) selected = null;   // tåget har försvunnit
   document.documentElement.style.setProperty("--line", TAB_COLOR[current] || "#1c4e80");
-  // På röda linjen skulle ett rött tåg i tid se ut som kraftigt försenat: pilar i textfärg där.
-  document.documentElement.style.setProperty("--arrow", current === "TB2" ? "var(--ink)" : "var(--line)");
   renderSummary(tab);
   renderAlerts(tab);
   renderBoard(tab);
