@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass, field
 
+from .board import base_line
 from .static_gtfs import StaticData, to_epoch
 
 ACCESS_RE = re.compile(r"\b(hiss\w*|rulltrapp\w*|entré\w*|uppgång\w*|utgång\w*|trapp\w*|ramp\w*)\b", re.I)
@@ -142,6 +143,34 @@ def _category(header: str, desc: str, level: str) -> str:
     if TRAFFIC_RE.search(desc):
         return "traffic"
     return "info"
+
+
+# SL Deviations har också meddelanden om en enskild avgång ("Försenad avgång": "... från
+# Käppala kl 15:38 mot Ropsten ..."). Samma sak finns som turlarm i GTFS-RT, så de visas
+# bara under Enskilda avgångar.
+SINGLE_DEP_HEAD_RE = re.compile(r"^(försenad|inställd|ändrad|extra)\w*\s+(avgång|tur)\b", re.I)
+SINGLE_DEP_RE = re.compile(r"\bfrån\s+(?P<orig>[^.,]+?)\s+kl\.?\s*(?P<h>\d{1,2})[:.](?P<m>\d{2})\s+mot\s+(?P<dest>[^.,]+?)(?=\s+(på grund|pga|p\.g\.a)|[.,]|$)", re.I)
+SINGLE_DEP_KEEP_S = 3600   # visa avgångar utan turlarm i högst en timme efter avgång
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"[\s.]+", " ", text.lower()).strip()
+
+
+def _single_departure(f: dict, now: int) -> tuple[int | None, str] | None:
+    """(avgångstid, destination) om meddelandet gäller en enskild avgång."""
+    m = SINGLE_DEP_RE.search(f["details"]) or SINGLE_DEP_RE.search(f["header"])
+    if not m and not SINGLE_DEP_HEAD_RE.search(f["header"]):
+        return None
+    if not m:
+        return None, ""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    local = datetime.fromtimestamp(now, ZoneInfo("Europe/Stockholm"))
+    dep = local.replace(hour=int(m["h"]) % 24, minute=int(m["m"]), second=0, microsecond=0).timestamp()
+    if dep > now + 12 * 3600:      # "kl 23:50" strax efter midnatt gäller gårdagen
+        dep -= 86400
+    return int(dep), m["dest"].strip()
 
 
 def _deviation_category(f: dict) -> str:
@@ -315,6 +344,22 @@ def build_alerts(static: StaticData, feed, now: int, deviations: list | None = N
         for tabs_lines, f in rail_items(deviations, now):
             cat = _deviation_category(f)
             urgent = (f["priority"].get("urgency_level") or 0) >= 5
+            single = _single_departure(f, now)
+            if single is not None:
+                departs, dest = single
+                text = f["details"] or f["header"]
+                for tab, lines in tabs_lines.items():
+                    known = trips_by_tab.get(tab, [])
+                    if any(_norm(text) in _norm(t.text) or _norm(t.text) in _norm(text)
+                           or (departs and t.departs == departs and base_line(t.line) == base_line(lines[0]))
+                           for t in known):
+                        continue  # samma avgång finns redan som turlarm
+                    if departs and departs < now - SINGLE_DEP_KEEP_S:
+                        continue
+                    trips_by_tab.setdefault(tab, []).append(TripAlert(
+                        id=f["id"], trip_id="", line=lines[0], train_number="",
+                        destination=dest, departs=departs, text=text))
+                continue
             for tab, lines in tabs_lines.items():
                 title, text = f["header"], f["details"]
                 if text.lower().startswith(title.lower()) and re.match(r"\s*([.:!\n]|$)", text[len(title):]):
@@ -332,7 +377,7 @@ def build_alerts(static: StaticData, feed, now: int, deviations: list | None = N
         cats = per_tab.get(tab, {c: [] for c in CATEGORIES})
         dd = _dedupe if deviations is None else list  # Deviations har ett meddelande per ärende
         ta = TabAlerts(**{c: sorted(dd(cats[c]), key=_recency, reverse=True) for c in CATEGORIES})
-        ta.trips = sorted(trips_by_tab.get(tab, []), key=_recency, reverse=True)
+        ta.trips = sorted(trips_by_tab.get(tab, []), key=lambda t: t.departs or 0, reverse=True)
         out[tab] = ta
     return out, notes
 

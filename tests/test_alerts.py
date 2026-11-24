@@ -198,3 +198,25 @@ def test_deviations_source(static):
     assert not out["TB1"].traffic
     assert [a.id for a in out["TB3"].access] == ["150"]
     assert [a.id for a in out["SB"].info] == ["400"]
+
+
+def test_single_departure_deviation_not_duplicated(static):
+    """'Försenad avgång' i SL Deviations är samma sak som turlarmet i GTFS-RT."""
+    now = to_epoch(SD, NOW_S)
+    f = _feed(now)
+    txt = "Försening på 5 minuter för pendeltåg 43 från A kl 13:30 mot C på grund av signalfel."
+    _alert(f, "t1", "Försenad avgång", txt, trips=["t1"])
+    devs = [
+        _dev(900, "Försenad avgång", [("TRAIN", "43")], txt, now - 600, now + 3600, imp=7, urg=5),
+        _dev(901, "Försenad avgång", [("TRAIN", "43")],
+             "Försening på 10 minuter för pendeltåg 43 från A kl 13:50 mot C på grund av signalfel.",
+             now - 600, now + 3600, imp=7, urg=5),
+        _dev(902, "Försenad avgång", [("TRAIN", "43")],
+             "Försening på 5 minuter för pendeltåg 43 från A kl 09:00 mot C.", now - 600, now + 3600, imp=7),
+    ]
+    out, _ = build_alerts(static, f, now, deviations=devs)
+    pt = out["PT"]
+    assert pt.traffic == []
+    assert [(t.id, t.destination) for t in pt.trips] == [("901", "C"), ("t1", static.trips["t1"].headsign or "C")]
+    assert pt.trips[0].departs == to_epoch(SD, 13 * 3600 + 50 * 60)
+    assert pt.count == 2
