@@ -214,6 +214,10 @@ def load_static(path: Path | None = None, dates: set[str] | None = None) -> Stat
                 bus.lines.append(line)
                 bus.kinds.append((r.get("route_desc") or "").strip())
                 continue
+            if config.is_boat_route_type(rtype):
+                if line:
+                    routes[r["route_id"]] = (line, config.BOAT_TAB)
+                continue
             if not config.is_rail_route_type(rtype):
                 continue
             tab = config.LINE_TO_TAB.get(line)
@@ -342,7 +346,7 @@ def load_static(path: Path | None = None, dates: set[str] | None = None) -> Stat
                       stop_tabs=stop_tabs, stop_lat=stop_lat, bus=bus)
 
 
-CACHE_VERSION = 5  # höj när StaticData ändras
+CACHE_VERSION = 6  # höj när StaticData ändras
 
 
 def load_static_cached(dates: set[str]) -> StaticData:

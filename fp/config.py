@@ -47,9 +47,26 @@ TABS = [
     {"code": "TB1", "name": "Gröna linjen", "lines": ["17", "18", "19"]},
     {"code": "TB2", "name": "Röda linjen", "lines": ["13", "14"]},
     {"code": "TB3", "name": "Blå linjen", "lines": ["10", "11"]},
+    # Båtar: SL:s pendelbåtar (80-89) och Waxholmsbolaget (2-31). Alla båtlinjer i flödet
+    # hamnar här även om de inte står i listan (Waxholmsbolaget har säsongslinjer).
+    # Linjenumren krockar med spårlinjerna, så båtar känns igen på route_type, inte nummer.
+    {"code": "BAT", "name": "Båt", "mode": "boat", "noun": ("båt", "båtar"),
+     "lines": ["80", "80X", "82", "84", "89", "2", "3", "4", "5", "7", "8", "9", "10", "11", "12",
+               "13", "14", "14X", "16", "17", "18", "19", "20", "21", "22", "23", "25", "28", "29", "30", "31"]},
 ]
 TAB_BY_CODE = {t["code"]: t for t in TABS}
-LINE_TO_TAB = {line: t["code"] for t in TABS for line in t["lines"]}
+BOAT_TAB = "BAT"
+LINE_TO_TAB = {line: t["code"] for t in TABS if t.get("mode") != "boat" for line in t["lines"]}
+
+
+def noun(tab: str, plural: bool = False) -> str:
+    """'tåg' eller 'båt'/'båtar' beroende på flik."""
+    n = TAB_BY_CODE.get(tab, {}).get("noun", ("tåg", "tåg"))
+    return n[1] if plural else n[0]
+
+
+def is_boat_route_type(route_type: int) -> bool:
+    return route_type == 4 or 1000 <= route_type <= 1299
 
 
 def is_rail_route_type(route_type: int) -> bool:

@@ -256,6 +256,8 @@ def line_patterns(static: StaticData) -> dict[str, list[dict]]:
     best: dict[tuple[str, str], Trip] = {}
     variants: dict[tuple[str, str], set[str]] = defaultdict(set)
     for t in static.trips.values():
+        if not t.stop_ids:
+            continue
         key = (t.tab, base_line(t.line, config.TAB_BY_CODE[t.tab]["lines"]))
         variants[key].add(t.line)
         if key not in best or len(t.stop_ids) > len(best[key].stop_ids):

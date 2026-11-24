@@ -212,3 +212,12 @@ har sidan öppen, så det kostar inga extra anrop mot Trafiklab. Historiken (sen
 sparas i `DATA_DIR/history.json` på Fly-volymen och överlever omstarter (`fp/history.py`).
 Luckor betyder att ingen hade sidan öppen; ensamma värden ritas som prickar.
 
+## Båt
+
+Fliken Båt har SL:s pendelbåtar och Djurgårdsfärjan (80–89) och Waxholmsbolagets linjer.
+Båtar känns igen på `route_type` (1000–1299 eller 4), inte linjenummer, eftersom numren krockar
+med spårlinjerna (t.ex. Waxholmsbolagets 17–19 och gröna linjen). Alla båtlinjer i flödet hamnar i
+fliken, även säsongslinjer som inte står i `config.TABS`. Störningar från SL Deviations med
+trafikslag SHIP/FERRY går hit. Skärgårdens linjer går inte att rita som ett linjeträd, så läget
+"Alla" visar en lista över linjerna; linjekartan visas när man väljer en linje.
+

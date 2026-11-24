@@ -19,6 +19,7 @@ GROUPS = [
     ("Tunnelbana", ["TB1", "TB2", "TB3"]),
     ("Pendeltåg", ["PT"]),
     ("Lokalbanor och spårväg", ["RB", "SB", "LB", "TVB", "SpvC"]),
+    ("Båt", ["BAT"]),
 ]
 RANK = {"major": 2, "minor": 1, "normal": 0}
 
@@ -104,12 +105,12 @@ def _describe(m: dict) -> str:
     if m["cancelled"]:
         bits.append(f"{m['cancelled']} inställd{'a' if m['cancelled'] > 1 else ''} avgång{'ar' if m['cancelled'] > 1 else ''}")
     if m["late5"]:
-        bits.append(f"{m['late5']} tåg minst 5 min sen{'a' if m['late5'] > 1 else 't'}")
+        bits.append(f"{m['late5']} {config.noun(m['code'], m['late5'] > 1)} minst 5 min sen{'a' if m['late5'] > 1 else ''}")
     elif m["max"] and m["max"] >= 3:
         bits.append(f"förseningar upp till {round(m['max'])} min")
     missing = m["planned"] - m["count"]
     if missing >= 2 and m["planned"] and missing / m["planned"] >= 0.15:
-        bits.append(f"{m['count']} tåg med realtid mot {m['planned']} enligt tidtabell")
+        bits.append(f"{m['count']} {config.noun(m['code'], m['count'] != 1)} med realtid mot {m['planned']} enligt tidtabell")
     if not bits:
         return m["name"]
     head, rest = bits[0], bits[1:3]

@@ -22,7 +22,7 @@ def static(tmp_path):
                             ["R43", "43", "Pendeltåg 43", "106"],
                             ["B7", "7", "Buss 7", "700"],      # ska filtreras bort
                             ["T10", "10", "Blå linjen", "401"],
-                            ["F10", "10", "Båtlinje 10", "1000"]]),   # båt, ska filtreras bort
+                            ["F10", "10", "Båtlinje 10", "1000"]]),   # båt: egen flik, inte blå linjen
         "trips.txt": _csv([["route_id", "service_id", "trip_id", "trip_headsign", "direction_id", "trip_short_name"],
                            ["R43", "S1", "t1", "Nynäshamn", "0", "2335"],
                            ["R43", "S1", "t2", "Bålsta", "1", "2340"],
@@ -71,7 +71,8 @@ def _tu(feed, trip_id, updates, cancelled=False):
 
 
 def test_filters_and_maps(static):
-    assert set(static.trips) == {"t1", "t2", "t3", "m1"}  # buss 7 och båt 10 bortfiltrerade
+    assert set(static.trips) == {"t1", "t2", "t3", "m1", "f1"}  # buss 7 bortfiltrerad
+    assert static.trips["f1"].tab == "BAT" and static.trips["m1"].tab == "TB3"
     assert static.trips["t1"].tab == "PT" and static.trips["m1"].tab == "TB3"
     assert static.trips["t1"].train_number == "2335"
     assert static.trips["m1"].train_number == "10"  # fallback till linjenummer

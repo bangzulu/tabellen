@@ -84,6 +84,16 @@
   .sum-stats .short dd { color: var(--late); }
   /* Linjeväljare: gäller både tabell och linjevy */
   .sum-lines { display: flex; flex-wrap: wrap; gap: 6px; }
+  .lx { padding: 4px 12px 12px; }
+  .lx-group h3 { margin: 12px 0 4px; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .lx-item { display: grid; grid-template-columns: 2.6em minmax(0, 1fr) auto; gap: 10px; align-items: baseline; width: 100%;
+             padding: 7px 4px; border: 0; border-bottom: 1px solid var(--rule); background: none; color: var(--ink);
+             font: inherit; text-align: left; cursor: pointer; }
+  .lx-item:hover { background: var(--band); }
+  .lx-line { font-weight: 800; box-shadow: inset 0 -2px 0 var(--line); justify-self: start; padding: 0 1px; }
+  .lx-ends { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lx-n { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .lx-item.short .lx-n .muted { color: var(--late); font-weight: 700; }
   .sum-lines button {
     display: inline-flex; align-items: baseline; gap: 6px; padding: 5px 11px; border-radius: 4px; cursor: pointer;
     font: inherit; font-size: .9rem; color: var(--ink); background: var(--band); border: 1px solid transparent;
@@ -436,9 +446,9 @@ const fmtSec = new Intl.DateTimeFormat("sv-SE", { hour: "2-digit", minute: "2-di
 const fmtDay = new Intl.DateTimeFormat("sv-SE", { day: "numeric", month: "short", timeZone: TZ });
 const fmtYmd = new Intl.DateTimeFormat("sv-SE", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: TZ });
 const TAB_NAMES = { OVR: "Översikt", PT: "Pendeltåg", RB: "Roslagsbanan", TVB: "Tvärbanan", SB: "Saltsjöbanan", LB: "Lidingöbanan",
-                    SpvC: "Linje 7", TB1: "Gröna linjen", TB2: "Röda linjen", TB3: "Blå linjen", BUS: "Buss" };
+                    SpvC: "Linje 7", TB1: "Gröna linjen", TB2: "Röda linjen", TB3: "Blå linjen", BAT: "Båt", BUS: "Buss" };
 const TAB_COLOR = { PT: "#c8327a", RB: "#7d4a9e", TVB: "#c26a12", SB: "#12858c", LB: "#7a5b4e",
-                    SpvC: "#66707a", TB1: "#2c8a40", TB2: "#cc2f27", TB3: "#1f6fb2", BUS: "#9fb4c8" };
+                    SpvC: "#66707a", TB1: "#2c8a40", TB2: "#cc2f27", TB3: "#1f6fb2", BAT: "#4a62b0", BUS: "#9fb4c8" };
 const SRC = {
   "tripupdate": ["", ""],
   "tripupdate-inferred": ["≈", "Härledd: flödet saknar passerade hållplatser"],
@@ -543,7 +553,8 @@ function lineSelector(tab, counts) {
   };
   return el("div", { class: "sum-lines", role: "group", "aria-label": "Välj linje" },
     btn(ALL, "Alla", tab.count, tab.planned),
-    ...tab.lines.map((l) => btn(l.line, l.line, counts.get(l.line) || 0, l.planned)));
+    ...tab.lines.filter((l) => current !== "BAT" || l.planned || counts.get(l.line) || sel === l.line)   // båtar: dölj linjer utan turer just nu
+      .map((l) => btn(l.line, l.line, counts.get(l.line) || 0, l.planned)));
 }
 
 function setLine(value) {
@@ -625,7 +636,7 @@ function renderBoard(tab) {
     el("th", { class: "dev", text: "Avvikelse" }), el("th", { text: "Linje" }), el("th", { text: "Destination" }),
     el("th", { text: "Senast passerad" }), el("th", { class: "t", text: "Passerade" }),
     el("th", { class: "t hide-sm", text: "Ordinarie" }), el("th", { class: "hide-sm", text: "Nästa" }),
-    el("th", { class: "t", text: "Tågnr" })));
+    el("th", { class: "t", text: current === "BAT" ? "Turnr" : "Tågnr" })));
   const tbody = el("tbody");
   let shown = 0;
   const sel = lvSelection(tab);
@@ -726,7 +737,7 @@ function treeFor(tab) {
 function vehLabel(r) {
   const d = r.delay_min == null ? "" : r.delay_min > 0 ? `, ${r.delay_min} min sen` : r.delay_min < 0 ? `, ${-r.delay_min} min tidig` : ", i tid";
   const where = r.next_stop && r.status === "running" ? `mellan ${r.observed_stop} och ${r.next_stop}` : `vid ${r.observed_stop}`;
-  return `Tåg ${r.train_number}, linje ${r.line} mot ${r.destination}, ${where}${d}`;
+  return `${r.tab === "BAT" ? "Tur" : "Tåg"} ${r.train_number}, linje ${r.line} mot ${r.destination}, ${where}${d}`;
 }
 
 let narrowView = null;   // sätts vid start
@@ -779,11 +790,12 @@ function renderLv() {
       el("p", { class: "lv-empty", text: "Ingen linjeinformation för det här trafikslaget." }));
     return;
   }
-  const body = sel === ALL ? treeBody(tab) : lineBody(tab, tab.lines.find((l) => l.line === sel));
+  const body = sel !== ALL ? lineBody(tab, tab.lines.find((l) => l.line === sel))
+    : current === "BAT" ? lineIndexBody(tab) : treeBody(tab);
 
   const selRow = selected && tabRows(tab).find((r) => r.trip_id === selected);
   const selCard = selRow ? el("div", { class: "lv-sel", "aria-live": "polite" },
-    el("div", { class: "top" }, pill(selRow), el("strong", { text: `${selRow.line} ${selRow.destination}` }), el("span", { class: "muted", text: "tåg " + selRow.train_number })),
+    el("div", { class: "top" }, pill(selRow), el("strong", { text: `${selRow.line} ${selRow.destination}` }), el("span", { class: "muted", text: (current === "BAT" ? "tur " : "tåg ") + selRow.train_number })),
     el("span", { class: "muted", text: selRow.status === "running" && selRow.next_stop
       ? `${selRow.observed_stop} → ${selRow.next_stop}${selRow.next_expected_at ? ", förväntas " + time(selRow.next_expected_at) : ""}`
       : selRow.status === "terminus" ? `Vid ändhållplats ${selRow.observed_stop}` : selRow.observed_stop }),
@@ -795,7 +807,7 @@ function renderLv() {
     selCard,
     el("div", { class: "lv-legend" }, ...body.legend.map((t) => el("span", { text: t }))),
     el("div", { class: "lv-scroll", id: "lv-scroll" }, body.track),
-    body.outside.length ? el("p", { class: "lv-foot", text: `${body.outside.length} tåg kunde inte placeras (station utanför linjekartan).` }) : null,
+    body.outside.length ? el("p", { class: "lv-foot", text: `${body.outside.length} ${current === "BAT" ? (body.outside.length > 1 ? "båtar" : "båt") : "tåg"} kunde inte placeras (station utanför linjekartan).` }) : null,
   ].filter(Boolean));
 }
 
@@ -936,6 +948,42 @@ function treeBody(tab) {
       el("span", { text: `Linjerna ${tab.lines.map((l) => l.line).join(", ")} · ${tab.count} i trafik (${tab.planned} enligt tidtabell)` }))],
     legend: ["▲ norrut", "Välj linje ovan för detaljer", "▼ söderut"],
     track, outside,
+  };
+}
+
+/* Båtar: skärgårdens linjer går inte att rita som ett träd. Lista linjerna i stället
+   (SL:s pendelbåtar och Waxholmsbolaget) och visa linjekartan när man väljer en linje. */
+const SL_BOAT_LINES = /^8\d/;
+function lineIndexBody(tab) {
+  const counts = new Map();
+  for (const r of tabRows(tab)) if (r.status !== "cancelled") {
+    const k = baseLineOf(tab, r.line);
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  const item = (l) => {
+    const ends = [...new Set([l.stations[0], l.stations[l.stations.length - 1]])].join(" – ");
+    const n = counts.get(l.line) || 0;
+    const b = el("button", { type: "button", class: "lx-item" + (isShort(n, l.planned) ? " short" : "") },
+      el("span", { class: "lx-line", text: l.line }), el("span", { class: "lx-ends", text: ends }),
+      el("span", { class: "lx-n" }, el("b", { text: n }), el("span", { class: "muted", text: ` (${l.planned})` })));
+    b.addEventListener("click", () => setLine(l.line));
+    return b;
+  };
+  const group = (title, lines) => lines.length ? el("section", { class: "lx-group" },
+    el("h3", { text: title }), ...lines.map(item)) : null;
+  const active = (l) => l.planned || counts.get(l.line);
+  const sl = tab.lines.filter((l) => SL_BOAT_LINES.test(l.line));
+  const wax = tab.lines.filter((l) => !SL_BOAT_LINES.test(l.line));
+  const quiet = tab.lines.filter((l) => !active(l)).length;
+  return {
+    head: [el("div", { class: "lv-title" }, el("strong", { text: TAB_NAMES[current] }),
+      el("span", { text: `${tab.count} i trafik (${tab.planned} enligt tidtabell)` }))],
+    legend: ["Linje", "Välj en linje för linjekarta", "i trafik (tidtabell)"],
+    track: el("div", { class: "lx" },
+      group("SL pendelbåtar och Djurgårdsfärjan", sl.filter(active)),
+      group("Waxholmsbolaget", wax.filter(active)),
+      quiet ? el("p", { class: "lv-foot", text: `${quiet} linjer utan turer just nu: ${tab.lines.filter((l) => !active(l)).map((l) => l.line).join(", ")}` }) : null),
+    outside: [],
   };
 }
 

@@ -23,6 +23,7 @@ URL = "https://deviations.integration.sl.se/v1/messages"
 MIN_INTERVAL_S = 60          # Trafiklabs fair use
 STALE_LIMIT_S = 15 * 60      # äldre data än så räknas som otillgängligt
 RAIL_MODES = {"METRO", "TRAIN", "TRAM"}
+BOAT_MODES = {"SHIP", "FERRY"}
 
 
 def _base(designation: str) -> str:
@@ -30,7 +31,7 @@ def _base(designation: str) -> str:
 
 
 # designation → flik ("43" → PT, "27" → RB). Båtar och bussar filtreras bort på trafikslag.
-LINE_TAB = {_base(line): t["code"] for t in config.TABS for line in t["lines"]}
+LINE_TAB = {_base(line): t["code"] for t in config.TABS if t.get("mode") != "boat" for line in t["lines"]}
 
 
 def _epoch(s: str | None) -> int | None:
@@ -92,13 +93,16 @@ def load_saved(path=config.DATA_DIR / "deviations.json") -> tuple[list | None, f
 
 
 def rail_items(devs: list, now: int):
-    """Ger (flikar, fält) för varje aktivt spårmeddelande."""
+    """Ger (flikar, fält) för varje aktivt meddelande om spårtrafik eller båt."""
     for d in devs:
         scope = d.get("scope") or {}
-        lines = [l for l in scope.get("lines") or [] if l.get("transport_mode") in RAIL_MODES]
+        lines = [l for l in scope.get("lines") or [] if l.get("transport_mode") in RAIL_MODES | BOAT_MODES]
         tabs: dict[str, list[str]] = {}
         for l in lines:
-            tab = LINE_TAB.get(_base(l.get("designation", "")))
+            if l.get("transport_mode") in BOAT_MODES:
+                tab = config.BOAT_TAB   # alla båtlinjer, även säsongslinjer som inte står i TABS
+            else:
+                tab = LINE_TAB.get(_base(l.get("designation", "")))
             if tab:
                 tabs.setdefault(tab, []).append(l.get("designation", ""))
         if not tabs:

@@ -49,6 +49,7 @@ MODE_WORDS = [
     (re.compile(r"saltsjöban", re.I), {"SB"}),
     (re.compile(r"lidingöban", re.I), {"LB"}),
     (re.compile(r"spårväg city|linje 7\b", re.I), {"SpvC"}),
+    (re.compile(r"båt|färja|waxholmsbolag", re.I), {"BAT"}),
 ]
 
 
