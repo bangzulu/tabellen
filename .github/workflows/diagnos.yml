@@ -18,6 +18,19 @@ jobs:
             out=$(curl -sS --max-time 100 -H "Accept-Encoding: gzip" --compressed -o body.txt -w "%{http_code} %{time_total}s" "https://$H$p" 2>&1)
             echo "::notice title=HTTP $p::$out $(head -c 200 body.txt | tr '\n' ' ')"
           done
+      - name: Störningar per flik
+        run: |
+          sleep 70  # SL Deviations hämtas högst en gång per minut efter start
+          curl -sS --max-time 100 --compressed "https://tabellen.fly.dev/api/board" -o board.json
+          python3 - <<'PY'
+          import json
+          d = json.load(open("board.json"))
+          print(f"::notice title=Källa::{d.get('alerts_source')} uppdaterad {d.get('alerts_timestamp')}")
+          for c, t in d["tabs"].items():
+              a = t["alerts"]
+              tr = "; ".join(("AKUT " if x["acute"] else "plan ") + x["title"][:60] for x in a["traffic"])
+              print(f"::notice title={c} märke {a['count']}::{tr} | hiss {len(a['access'])} | övr {len(a['info'])} | turer {len(a['trips'])}")
+          PY
       - name: Fly-status och loggar
         run: |
           echo "::notice title=Status::$(flyctl status -a tabellen 2>&1 | tr '\n' ' ' | head -c 900)"

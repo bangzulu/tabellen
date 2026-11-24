@@ -21,6 +21,7 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 
 from . import config
 from .alerts import build_alerts, to_json
+from .deviations import DeviationsCache, load_saved
 from .board import build_rows, group_for_tab, line_patterns, planned_counts
 from .bus import build_bus_overview
 from .overview import build_overview
@@ -88,6 +89,11 @@ def get_static(timeout: float = 90) -> StaticData:
 _start_reload()
 
 
+deviations = DeviationsCache()
+if not config.USE_SAVED_FEEDS:
+    threading.Thread(target=deviations.get, daemon=True).start()  # första hämtningen direkt
+
+
 def _fetch_feeds():
     jobs = {
         "tu": _pool.submit(feeds.get, "TripUpdates"),
@@ -125,10 +131,14 @@ def _patterns_for(static: StaticData) -> dict:
     return _patterns[1]
 
 
-def _build_payload(static: StaticData, tu, vp, sa) -> dict:
+def _build_payload(static: StaticData, tu, vp, sa, devs, devs_at) -> dict:
     now = int(time.time())
     patterns = _patterns_for(static)
-    alerts, notes = build_alerts(static, sa, now) if sa is not None else ({}, {})
+    if devs is not None or sa is not None:
+        alerts, notes = build_alerts(static, sa, now, deviations=devs)
+    else:
+        alerts, notes = {}, {}
+    alerts_ts = int(devs_at) if devs is not None else ((sa.header.timestamp or None) if sa is not None else None)
     rows = build_rows(static, tu, vp, now=now, notes=notes)
     planned_tab, planned_line = planned_counts(static, now)
     try:
@@ -140,7 +150,8 @@ def _build_payload(static: StaticData, tu, vp, sa) -> dict:
     return {
         "generated_at": now,
         "feed_timestamp": tu.header.timestamp or None,
-        "alerts_timestamp": (sa.header.timestamp or None) if sa is not None else None,
+        "alerts_timestamp": alerts_ts,
+        "alerts_source": "sl-deviations" if devs is not None else "gtfs-rt",
         "max_age_seconds": config.MAX_DATA_AGE_SECONDS,
         "bus_issues": bus_issues,   # antal busområden med förseningar (märke på Buss-fliken)
         "overview": build_overview(rows, alerts, planned_tab, bus, now),
@@ -179,16 +190,17 @@ def board():
     try:
         static = get_static()
         tu, vp, sa = _fetch_feeds()
+        devs, devs_at = load_saved() if config.USE_SAVED_FEEDS else deviations.get()
     except BudgetExceeded as exc:
         return jsonify(error=str(exc), code="budget"), 503
     except Exception as exc:  # nätverk, nyckel, ogiltig fil
         log.exception("Kunde inte hämta data")
         return jsonify(error=f"Kunde inte hämta data: {exc}", code="upstream"), 502
 
-    key = (id(static), id(tu), id(vp), id(sa), config.USE_SAVED_FEEDS and int(time.time() // 15))
+    key = (id(static), id(tu), id(vp), id(sa), id(devs), config.USE_SAVED_FEEDS and int(time.time() // 15))
     with _board_lock:
         if _board_cache is None or _board_cache[0] != key:
-            raw = json.dumps(_build_payload(static, tu, vp, sa), ensure_ascii=False,
+            raw = json.dumps(_build_payload(static, tu, vp, sa, devs, devs_at), ensure_ascii=False,
                              separators=(",", ":")).encode()
             _board_cache = (key, raw, gzip.compress(raw, 6))
         _, raw, gz = _board_cache

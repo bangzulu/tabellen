@@ -67,6 +67,7 @@
   }
   nav button:hover { opacity: 1; }
   nav button[aria-selected="true"] { background: var(--surface); color: var(--ink); opacity: 1; }
+  nav button[aria-selected="true"] .badge { color: var(--late); }
   nav .tick { flex: none; width: 4px; height: 1.15em; border-radius: 2px; background: var(--c); }
 
   /* Sammanfattning överst i fliken: i trafik enligt realtid mot tidtabell */
@@ -91,9 +92,18 @@
   .sum-lines button[aria-pressed="true"].short .plan { color: #ffd38a; }
   @media (max-width: 720px) { nav { flex-wrap: nowrap; overflow-x: auto; } }
   nav .badge {
-    min-width: 1.45em; height: 1.45em; padding: 0 4px; border-radius: 999px; font-size: .74em; font-weight: 800;
-    display: inline-grid; place-items: center; background: var(--late-bg); color: var(--late);
+    display: inline-flex; align-items: center; gap: 4px; font-size: .78em; font-weight: 800;
+    color: #ffc266; font-variant-numeric: tabular-nums; letter-spacing: .01em;
   }
+  nav .badge::before { content: ""; width: .5em; height: .5em; background: currentColor; }
+
+  /* Statusmarkör: liten fyrkant + text, utan färgad platta */
+  .mark { display: inline-flex; align-items: center; gap: .45em; font-size: .8rem; font-weight: 700; white-space: nowrap; color: var(--ink); }
+  .mark::before { content: ""; flex: none; width: .62em; height: .62em; background: currentColor; }
+  .mark.major { color: var(--very-late); }
+  .mark.minor::before { background: var(--late); }
+  .mark.normal { color: var(--muted); font-weight: 600; }
+  .mark.normal::before { background: none; box-shadow: inset 0 0 0 1.5px currentColor; }
 
   /* Störningar */
   .alerts { background: var(--surface); border: 1px solid var(--rule); border-top: 0; padding: 12px; }
@@ -103,7 +113,9 @@
   .alerts-head span { color: var(--muted); font-size: .85rem; }
   .calm { color: var(--muted); margin: 0 0 4px; }
   .alert-list { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 6px; }
-  .alert { border-left: 4px solid var(--late); background: var(--late-bg); border-radius: 0 4px 4px 0; }
+  .alert-list { gap: 0; }
+  .alert { border-left: 3px solid var(--late); border-bottom: 1px solid var(--rule); }
+  .alert:last-child { border-bottom: 0; }
   .alert summary { cursor: pointer; padding: 8px 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; list-style: none; }
   .alert summary::-webkit-details-marker { display: none; }
   .alert summary::before { content: "▸"; color: var(--late); width: .8em; flex: none; }
@@ -114,7 +126,7 @@
   .alert .body p { margin: 0 0 6px; }
   .alert .stops { color: var(--muted); font-size: .85rem; }
   .chips { display: inline-flex; gap: 4px; flex: none; }
-  .chip { font-size: .8rem; font-weight: 800; padding: 1px 6px; border-radius: 3px; border: 1px solid currentColor; color: var(--ink); opacity: .85; }
+  .chip { font-size: .85rem; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; box-shadow: inset 0 -2px 0 var(--line); padding: 0 1px; }
 
   .trip-alerts { margin: 4px 0 8px; }
   .trip-alerts h3, .minor summary { font-size: .9rem; font-weight: 700; margin: 0 0 4px; }
@@ -128,7 +140,9 @@
   .minor summary { cursor: pointer; color: var(--muted); font-weight: 600; padding: 4px 0; }
   .minor ul { margin: 4px 0 0; padding-left: 1.2em; }
   .minor li { margin: 0 0 6px; }
-  .minor li span { display: block; color: var(--muted); font-size: .85rem; }
+  .minor li > span:not(.chips) { display: block; color: var(--muted); font-size: .85rem; }
+  .minor li .chips { margin-right: 4px; vertical-align: 1px; }
+  .minor li .chip { font-size: .8rem; }
 
   .toolbar { display: flex; flex-wrap: wrap; gap: 8px 20px; padding: 10px 12px; background: var(--surface);
              border: 1px solid var(--rule); border-top: 0; font-size: .95rem; }
@@ -163,8 +177,10 @@
   .pill { display: inline-block; min-width: 3.2em; text-align: center; font-weight: 800; padding: 3px 8px; border-radius: 4px; }
   .pill.zero { color: var(--muted); font-weight: 400; }
   .pill.early { color: var(--ok); }
-  .pill.late { color: var(--late); background: var(--late-bg); }
-  .pill.very-late, .pill.cancelled { color: var(--very-late); background: var(--very-late-bg); }
+  .pill { font-variant-numeric: tabular-nums; }
+  .pill.late { color: var(--late); }
+  .pill.very-late, .pill.cancelled { color: var(--very-late); }
+  .pill.cancelled { font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; }
   .pill.unknown { color: var(--muted); font-weight: 400; }
 
   /* Linjevy (termometer) */
@@ -258,7 +274,7 @@
   }
   .ov-card:hover { background: var(--band); }
   .ov-card.minor { border-left-color: var(--late); }
-  .ov-card.major { border-left-color: var(--very-late); background: color-mix(in srgb, var(--very-late-bg) 45%, var(--surface)); }
+  .ov-card.major { border-left-color: var(--very-late); }
   .ov-top { display: flex; align-items: center; gap: 8px; }
   .ov-top strong { font-size: 1.05rem; font-weight: 800; flex: 1; }
   .ov-top .tick { flex: none; width: 4px; height: 1.1em; border-radius: 2px; background: var(--c); }
@@ -267,8 +283,9 @@
   .ov-facts { color: var(--muted); font-size: .9rem; }
   .ov-alerts { display: grid; gap: 2px; margin-top: 2px; }
   .ov-alert { font-size: .92rem; font-weight: 600; }
-  .ov-alert::before { content: "▲ "; color: var(--late); font-size: .75em; }
-  .ov-card.major .ov-alert::before, .ov-alert.major::before { color: var(--very-late); }
+  .ov-alert { display: flex; align-items: baseline; gap: .5em; }
+  .ov-alert::before { content: ""; flex: none; width: .5em; height: .5em; background: var(--late); transform: translateY(-.1em); }
+  .ov-card.major .ov-alert::before, .ov-alert.major::before { background: var(--very-late); }
   .ov-planned { display: block; max-width: 100%; color: var(--muted); font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   /* ---------- Bussöversikt ---------- */
@@ -312,10 +329,7 @@
   .bv-row:hover td { background: var(--band); }
   .bv-row.open td { background: var(--select-bg); }
   .bv-name { font: inherit; font-weight: 700; color: var(--ink); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
-  .bv-pill { display: inline-block; font-size: .75rem; font-weight: 800; padding: 2px 7px; border-radius: 3px; white-space: nowrap; }
-  .bv-pill.major { background: var(--very-late-bg); color: var(--very-late); }
-  .bv-pill.minor { background: var(--late-bg); color: var(--late); }
-  .bv-pill.normal { color: var(--muted); }
+
   .bv-sparkcell { display: inline-flex; align-items: center; gap: 6px; }
   .bv-spark path { fill: none; stroke: var(--ink); stroke-width: 1.6; }
   .bv-spark .ref { stroke: var(--late); stroke-dasharray: 2 2; stroke-width: 1; }
@@ -393,7 +407,7 @@
       <aside class="lv" id="lv" aria-label="Linjevy" hidden></aside>
     </div>
   </div>
-  <footer>Data från Trafiklab (GTFS Regional, SL), tabell och störningar. Avvikelse i minuter: + betyder sen.
+  <footer>Data från Trafiklab (GTFS Regional, SL) och SL:s störningsinformation (SL Deviations). Avvikelse i minuter: + betyder sen.
     Klicka på en avgång för att se den i linjevyn, eller på ett tåg i linjevyn för att hitta det i tabellen.</footer>
 </div>
 
@@ -445,6 +459,10 @@ function since(s) {
   if (!s) return "";
   const d = new Date(s * 1000);
   return "sedan " + (ymd(d) === ymd(new Date()) ? fmt.format(d) : fmtDay.format(d));
+}
+function until(s) {
+  const d = new Date(s * 1000);
+  return "till " + (ymd(d) === ymd(new Date()) ? fmt.format(d) : fmtDay.format(d));
 }
 function store(key, value) { try { localStorage.setItem(key, value); } catch (e) {} }
 function recall(key) { try { return localStorage.getItem(key); } catch (e) { return null; } }
@@ -549,7 +567,10 @@ function alertItem(a) {
 function minorSection(key, label, items) {
   if (!items.length) return null;
   const d = el("details", { class: "minor" }, el("summary", { text: `${label} (${items.length})` }),
-    el("ul", {}, ...items.map((a) => el("li", {}, a.title, a.text ? el("span", { text: a.text.split("\n")[0] }) : null))));
+    el("ul", {}, ...items.map((a) => el("li", {},
+      key === "planned" ? chips(a.lines) : null, key === "planned" && a.lines.length ? " " : null, a.title,
+      key === "planned" && a.until ? el("span", { text: until(a.until) }) :
+        a.text ? el("span", { text: a.text.split("\n")[0] }) : null))));
   if (openAlerts.has(key)) d.open = true;
   d.addEventListener("toggle", () => (d.open ? openAlerts.add(key) : openAlerts.delete(key)));
   return d;
@@ -562,10 +583,13 @@ function renderAlerts(tab) {
     box.replaceChildren(el("p", { class: "calm", text: "Störningsinformationen kunde inte hämtas just nu." }));
     return;
   }
+  const acute = a.traffic.filter((x) => x.acute), planned = a.traffic.filter((x) => !x.acute);
+  const src = last.alerts_source === "sl-deviations" ? "SL:s störningsinformation" : "GTFS-RT";
   box.replaceChildren(...[
-    el("div", { class: "alerts-head" }, el("h2", { text: "Störningar" }), el("span", { text: "uppdaterad " + time(last.alerts_timestamp) })),
-    !a.traffic.length && !a.trips.length ? el("p", { class: "calm", text: "Inga kända trafikstörningar." }) : null,
-    a.traffic.length ? el("ul", { class: "alert-list" }, ...a.traffic.map(alertItem)) : null,
+    el("div", { class: "alerts-head" }, el("h2", { text: "Störningar" }),
+      el("span", { text: `${src}, uppdaterad ${time(last.alerts_timestamp)}` })),
+    !acute.length && !a.trips.length ? el("p", { class: "calm", text: "Inga kända trafikstörningar just nu." }) : null,
+    acute.length ? el("ul", { class: "alert-list" }, ...acute.map(alertItem)) : null,
     a.trips.length ? el("div", { class: "trip-alerts" },
       el("h3", { text: "Enskilda avgångar" }),
       el("ul", {}, ...a.trips.map((t) => el("li", {},
@@ -573,6 +597,7 @@ function renderAlerts(tab) {
         el("span", { class: "tnr", text: "tåg " + t.train_number }),
         el("span", { class: "dep", text: time(t.departs), title: "Avgång från första hållplatsen" }),
         el("span", { text: `${t.destination}: ${t.text}` }))))) : null,
+    minorSection("planned", "Planerade ändringar", planned),
     minorSection("access", "Hissar och entréer", a.access),
     minorSection("info", "Skyltar och övrigt", a.info),
   ].filter(Boolean));
@@ -1000,7 +1025,7 @@ function ovCard(code, statusText, status, ...body) {
   const card = el("button", { type: "button", class: "ov-card " + status, style: `--c:${TAB_COLOR[code]}`,
                               "aria-label": `${TAB_NAMES[code]}: ${statusText}. Öppna ${TAB_NAMES[code]}.` },
     el("span", { class: "ov-top" }, el("span", { class: "tick", "aria-hidden": "true" }), el("strong", { text: TAB_NAMES[code] }),
-      el("span", { class: "bv-pill " + status, text: statusText })),
+      el("span", { class: "mark " + status, text: statusText })),
     ...body);
   card.addEventListener("click", () => { select(code); scrollTo({ top: 0 }); });
   return card;

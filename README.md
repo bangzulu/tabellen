@@ -35,23 +35,30 @@ Demodatan är påhittad. Flödet blir "inaktuellt" efter 2 minuter – kör skri
 
 ## Störningar
 
-Hämtas ur GTFS-RT ServiceAlerts och visas överst i varje flik, nyaste först, med antal i flikens märke.
-SL:s larm-id är ett löpnummer som följer skapandetiden och används för sorteringen.
-SL:s flöde saknar effekt och allvarlighetsgrad, så `fp/alerts.py` sorterar på text och koppling:
+Linje- och stationsmeddelanden hämtas från **SL Deviations**
+(`https://deviations.integration.sl.se/v1/messages`, ingen nyckel, högst ett anrop per minut),
+samma källa som sl.se/trafiklaget. Varje meddelande är knutet till linjer med trafikslag
+(`scope.lines[].transport_mode`), så ett pendeltågsmeddelande hamnar aldrig på tunnelbanan.
+Båtlinjer (SHIP) med samma nummer som gröna linjen filtreras bort på trafikslag.
+GTFS-RT ServiceAlerts används för larm på enskilda turer och som reserv om SL Deviations inte svarar
+(`alerts_source` i `/api/board` visar vilken källa som används).
 
 | Visas som | Vad |
 |---|---|
-| Störningar | linje- eller hållplatslarm med trafikpåverkan (inställt, ersättningsbuss, extrainsatt …) |
-| Enskilda avgångar | larm på en viss tur; texten visas också på raden i tabellen |
+| Störningar | akuta trafikstörningar; räknas i flikens märke |
+| Enskilda avgångar | larm på en viss tur (GTFS-RT); texten visas också på raden i tabellen |
+| Planerade ändringar | trafikmeddelanden som gäller mer än 12 timmar (banarbeten, nattrafik); hopfällda |
 | Hissar och entréer, Skyltar och övrigt | hopfällda; räknas inte i märket |
 
-Ett larm räknas bara som störning om texten innehåller trafikord (inställt, försenat, ersättningsbuss,
-extrainsatt, ingen trafik …); allmän information som trygghetsutrop och halka hamnar under övrigt.
-Flödets `cause` hjälper inte (OTHER_CAUSE även för förseningar) och `effect` saknas.
+Kategori (`fp/alerts.py`): `categories` FACILITY eller hiss-/entréord i rubriken → hissar och entréer;
+skylt-/utropsord eller `importance_level` 2 (hissar, entréer, museitrafik) → övrigt;
+trafikord eller `importance_level` ≥ 7 → trafik. Akut = `urgency_level` ≥ 5 eller giltighetstid ≤ 12 h.
 
-Plattformsskyltens korta texter ("Främre tåg", "Ingen påstigning") filtreras bort, och samma
-störning som publiceras både på linjen och på enskilda stationer slås ihop. Interna rubriker
-("Unv-Kår", "… RP") ersätts med beskrivningens första mening.
+Reservläget (GTFS-RT): SL:s flöde saknar effekt och allvarlighetsgrad, så larm sorteras på text.
+Hållplatslarm som nämner ett annat trafikslag ("Pendelns nätter" på tunnelbanans plattformar)
+visas bara på det trafikslaget. Plattformsskyltens korta texter filtreras bort och dubbletter slås ihop.
+
+Lokalt med `USE_SAVED_FEEDS=true` läses `data/deviations.json` om den finns.
 
 ## Översikt (startsida)
 

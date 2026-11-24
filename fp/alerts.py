@@ -1,5 +1,10 @@
-"""Störningar ur GTFS-RT ServiceAlerts, kopplade till flikarna.
+"""Störningar kopplade till flikarna.
 
+Linje- och stationsmeddelanden hämtas i första hand från SL Deviations (deviations.py),
+samma källa som sl.se/trafiklaget, där varje meddelande är knutet till linjer med
+trafikslag. GTFS-RT ServiceAlerts används för larm på enskilda turer och som reserv.
+
+Om GTFS-RT ServiceAlerts:
 SL:s flöde saknar effect och severity (alltid UNKNOWN), så sortering sker på text
 och på vilka linjer, hållplatser och turer larmet gäller. Tre nivåer:
   route  – larmet anger route_id: gäller linjen
@@ -29,6 +34,35 @@ TRAFFIC_RE = re.compile(
 )
 INTERNAL_HEADER_RE = re.compile(r"(\bRP\)?\s*$|^Stn\.?\s*medd)", re.I)
 CATEGORIES = ("traffic", "access", "info")
+# Akut eller planerat avgörs av giltighetstiden: akuta störningar gäller några timmar,
+# planerade ändringar dagar eller månader (SL publicerar om planerade dagligen).
+ACUTE_MAX_PERIOD_S = 12 * 3600
+ACUTE_NO_END_S = 6 * 3600
+# Trafikslag som nämns i texten. Ett hållplatslarm om pendeltåg som SL kopplat till
+# tunnelbanans plattformar ska inte visas på tunnelbanan.
+MODE_WORDS = [
+    (re.compile(r"pendel", re.I), {"PT"}),
+    (re.compile(r"tunnelban|tub", re.I), {"TB1", "TB2", "TB3"}),
+    (re.compile(r"roslagsban", re.I), {"RB"}),
+    (re.compile(r"tvärban", re.I), {"TVB"}),
+    (re.compile(r"saltsjöban", re.I), {"SB"}),
+    (re.compile(r"lidingöban", re.I), {"LB"}),
+    (re.compile(r"spårväg city|linje 7\b", re.I), {"SpvC"}),
+]
+
+
+def is_acute(since: int | None, until: int | None, now: int) -> bool:
+    if since and until:
+        return until - since <= ACUTE_MAX_PERIOD_S
+    return bool(since and now - since <= ACUTE_NO_END_S)
+
+
+def _named_tabs(text: str) -> set[str]:
+    out: set[str] = set()
+    for rx, tabs in MODE_WORDS:
+        if rx.search(text):
+            out |= tabs
+    return out
 TRIP_DONE_GRACE_S = 30 * 60  # visa larm för avgångar som avslutats för högst 30 min sedan
 
 
@@ -43,6 +77,7 @@ class AlertItem:
     stops: list[str]
     since: int | None
     until: int | None
+    acute: bool = False
 
 
 @dataclass
@@ -65,8 +100,8 @@ class TabAlerts:
 
     @property
     def count(self) -> int:
-        """Antal som räknas som störning (märket på fliken)."""
-        return len(self.traffic) + len(self.trips)
+        """Antal akuta störningar (märket på fliken). Planerade ändringar räknas inte."""
+        return sum(1 for a in self.traffic if a.acute) + len(self.trips)
 
 
 def _text(ts) -> str:
@@ -105,6 +140,19 @@ def _category(header: str, desc: str, level: str) -> str:
     if ACCESS_RE.search(desc):
         return "access"
     if TRAFFIC_RE.search(desc):
+        return "traffic"
+    return "info"
+
+
+def _deviation_category(f: dict) -> str:
+    """SL Deviations: hissar/entréer, skyltar och övrigt, annars trafik.
+    importance_level 2 används för hissar, entréer och museitrafik, aldrig för trafikstörningar."""
+    header, details = f["header"], f["details"]
+    if f["facility"] or ACCESS_RE.search(header):
+        return "access"
+    if INFO_RE.search(header) or (f["priority"].get("importance_level") or 0) <= 2:
+        return "info"
+    if TRAFFIC_RE.search(header) or TRAFFIC_RE.search(details) or (f["priority"].get("importance_level") or 0) >= 7:
         return "traffic"
     return "info"
 
@@ -187,8 +235,11 @@ def _recency(item) -> tuple[int, int]:
     return num, getattr(item, "since", None) or 0
 
 
-def build_alerts(static: StaticData, feed, now: int) -> tuple[dict[str, TabAlerts], dict[str, list[str]]]:
-    """Returnerar (larm per flik, korta noteringar per trip_id för tabellraderna)."""
+def build_alerts(static: StaticData, feed, now: int, deviations: list | None = None,
+                 ) -> tuple[dict[str, TabAlerts], dict[str, list[str]]]:
+    """Returnerar (larm per flik, korta noteringar per trip_id för tabellraderna).
+    Med deviations (SL Deviations) tas linje- och stationsmeddelanden därifrån och
+    GTFS-RT används bara för enskilda turer."""
     per_tab: dict[str, dict[str, list[AlertItem]]] = {}
     trips_by_tab: dict[str, list[TripAlert]] = {}
     notes: dict[str, list[str]] = {}
@@ -236,9 +287,14 @@ def build_alerts(static: StaticData, feed, now: int) -> tuple[dict[str, TabAlert
                 ))
             continue
 
+        if deviations is not None:
+            continue  # linje- och stationsmeddelanden kommer från SL Deviations
         if not has_route:
             for sid in stop_ids:
                 tabs |= static.stop_tabs.get(sid, set())
+            named = _named_tabs(header + " " + desc)
+            if named:
+                tabs &= named
         if not tabs:
             continue  # buss, båt eller hållplatser utan spårtrafik
 
@@ -249,15 +305,33 @@ def build_alerts(static: StaticData, feed, now: int) -> tuple[dict[str, TabAlert
         item = AlertItem(
             id=e.id, level=level, category=_category(header, desc, level), title=title, text=text,
             lines=sorted(lines, key=lambda x: (len(x), x)), stops=stops[:6],
-            since=since, until=until,
+            since=since, until=until, acute=is_acute(since, until, now),
         )
         for tab in tabs:
             per_tab.setdefault(tab, {c: [] for c in CATEGORIES})[item.category].append(item)
 
+    if deviations is not None:
+        from .deviations import rail_items
+        for tabs_lines, f in rail_items(deviations, now):
+            cat = _deviation_category(f)
+            urgent = (f["priority"].get("urgency_level") or 0) >= 5
+            for tab, lines in tabs_lines.items():
+                title, text = f["header"], f["details"]
+                if text.lower().startswith(title.lower()) and re.match(r"\s*([.:!\n]|$)", text[len(title):]):
+                    text = text[len(title):].lstrip(" .:!\n")
+                item = AlertItem(
+                    id=f["id"], level="route", category=cat, title=title.rstrip("."), text=text,
+                    lines=sorted(set(lines), key=lambda x: (len(x), x)), stops=f["stops"][:6],
+                    since=f["since"], until=f["until"],
+                    acute=urgent or is_acute(f["since"], f["until"], now),
+                )
+                per_tab.setdefault(tab, {c: [] for c in CATEGORIES})[cat].append(item)
+
     out: dict[str, TabAlerts] = {}
     for tab in set(per_tab) | set(trips_by_tab):
         cats = per_tab.get(tab, {c: [] for c in CATEGORIES})
-        ta = TabAlerts(**{c: sorted(_dedupe(cats[c]), key=_recency, reverse=True) for c in CATEGORIES})
+        dd = _dedupe if deviations is None else list  # Deviations har ett meddelande per ärende
+        ta = TabAlerts(**{c: sorted(dd(cats[c]), key=_recency, reverse=True) for c in CATEGORIES})
         ta.trips = sorted(trips_by_tab.get(tab, []), key=_recency, reverse=True)
         out[tab] = ta
     return out, notes

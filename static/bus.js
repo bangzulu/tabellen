@@ -220,7 +220,7 @@
     const toggle = () => { isOpen ? open.delete(a.name) : open.add(a.name); render(); };
     btn.addEventListener("click", toggle);
     const tr = el("tr", { class: "bv-row " + a.status + (isOpen ? " open" : ""), id: "bv-area-" + slug(a.name) },
-      el("td", {}, el("span", { class: "bv-pill " + a.status, text: STATUS[a.status] })),
+      el("td", {}, el("span", { class: "mark " + a.status, text: STATUS[a.status] })),
       el("td", {}, btn),
       el("td", { class: "t" }, nf0.format(a.buses)),
       el("td", { class: "t" }, a.buses ? `${pct(a.share5)}` : "–", a.late5 ? el("span", { class: "sub", text: `${a.late5} bussar` }) : null),

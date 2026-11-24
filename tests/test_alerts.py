@@ -32,7 +32,8 @@ def test_route_alert_classified_and_mapped(static):
     now = to_epoch(SD, NOW_S)
     f = _feed(now)
     _alert(f, "1", "Förseningar och inställda avgångar",
-           "Förseningar på grund av signalfel. Följ skyltarna på stationen.", routes=["R43"])
+           "Förseningar på grund av signalfel. Följ skyltarna på stationen.", routes=["R43"],
+           start=now - 600, end=now + 3600)
     _alert(f, "2", "Avstängd hiss vid Odenplan", "Hissen är avstängd.", routes=["R43"])
     _alert(f, "3", "Skylt ur funktion vid Älvsjö", "Tekniskt fel.", routes=["R43"])
     _alert(f, "4", "Buss ersätter", "Gäller buss 7.", routes=["B7"])  # buss, ska ignoreras
@@ -127,8 +128,73 @@ def test_general_information_is_not_a_disruption(static):
     _alert(f, "1", "Trygghetsutrop ombord. Dagtid varje dag",
            "Om du känner dig otrygg eller ser någon som behöver hjälp, chatta med vår trygghetscentral i SL-appen.",
            routes=["R43"])
-    _alert(f, "2", "Ingen trafik mellan Odenplan och City", "Byt till buss.", routes=["R43"])
+    _alert(f, "2", "Ingen trafik mellan Odenplan och City", "Byt till buss.", routes=["R43"],
+           start=now - 600, end=now + 3600)
     out, _ = build_alerts(static, f, now)
     assert [a.id for a in out["PT"].info] == ["1"]
     assert [a.id for a in out["PT"].traffic] == ["2"]
     assert out["PT"].count == 1
+
+
+def test_stop_alert_naming_other_mode_is_skipped(static):
+    """SL kopplar ibland pendeltågsmeddelanden till tunnelbanans plattformar."""
+    now = to_epoch(SD, NOW_S)
+    f = _feed(now)
+    _alert(f, "m1", "Tunnelbanans nätter", "Omlagd trafik för tunnelbanan i natt, byt till buss.", stops=["A"])
+    out, _ = build_alerts(static, f, now)
+    assert "PT" not in out
+
+
+def test_planned_change_not_counted_on_tab(static):
+    now = to_epoch(SD, NOW_S)
+    f = _feed(now)
+    _alert(f, "p1", "Inställda tåg mellan A och B", "Banarbete, bussar ersätter.", routes=["R43"],
+           start=now - 86400, end=now + 3 * 86400)
+    out, _ = build_alerts(static, f, now)
+    assert out["PT"].traffic[0].acute is False
+    assert out["PT"].count == 0
+
+
+def _dev(cid, header, lines, details="", frm=None, upto=None, imp=5, urg=1, cats=None, stops=()):
+    from datetime import datetime, timezone
+    iso = lambda t: datetime.fromtimestamp(t, timezone.utc).isoformat()
+    return {
+        "deviation_case_id": cid, "publish": {"from": iso(frm), "upto": iso(upto)},
+        "priority": {"importance_level": imp, "influence_level": 5, "urgency_level": urg},
+        "message_variants": [{"header": header, "details": details, "language": "sv"}],
+        "scope": {"lines": [{"designation": d, "transport_mode": m} for m, d in lines],
+                  "stop_areas": [{"name": n} for n in stops]},
+        "categories": cats,
+    }
+
+
+def test_deviations_source(static):
+    now = to_epoch(SD, NOW_S)
+    f = _feed(now)
+    _alert(f, "g1", "Signalfel", "Förseningar.", routes=["R43"], start=now - 60, end=now + 600)  # ignoreras
+    devs = [
+        _dev(100, "Pendeltågen avgår från Stockholms central natt", [("TRAIN", "40"), ("TRAIN", "43")],
+             "Pendeltågen avgår från Stockholms central natt. Banarbete.", now - 3600, now + 3 * 86400, imp=7),
+        _dev(200, "Inställd delsträcka", [("METRO", "13")], "Tågen går inte mellan X och Y.", now - 600, now + 1800, imp=7, urg=5),
+        _dev(150, "Avstängd hiss vid Rissne", [("METRO", "10")], frm=now - 3600, upto=now + 86400, imp=2,
+             cats=[{"group": "FACILITY", "type": "LIFT"}]),
+        _dev(160, "Avstängd hiss vid Alvik", [("METRO", "17")], frm=now - 3600, upto=now + 86400, imp=2,
+             cats=[{"group": "FACILITY", "type": "LIFT"}]),
+        _dev(170, "Avstängd hiss vid Brommaplan", [("METRO", "18")], frm=now - 3600, upto=now + 86400, imp=2,
+             cats=[{"group": "FACILITY", "type": "LIFT"}]),
+        _dev(300, "Bryggan Ängsö indragen", [("SHIP", "17")], frm=now - 3600, upto=now + 86400),  # båt, inte gröna linjen
+        _dev(400, "Skylt ur funktion vid Igelboda", [("TRAM", "25")], frm=now - 3600, upto=now + 86400),
+        _dev(500, "Framtida", [("METRO", "14")], frm=now + 3600, upto=now + 7200),
+    ]
+    out, _ = build_alerts(static, f, now, deviations=devs)
+    pt = out["PT"]
+    assert [a.id for a in pt.traffic] == ["100"]
+    assert pt.traffic[0].lines == ["40", "43"] and pt.traffic[0].acute is False
+    assert pt.traffic[0].text == "Banarbete."
+    assert pt.count == 0
+    tb2 = out["TB2"]
+    assert [a.id for a in tb2.traffic] == ["200"] and tb2.count == 1
+    assert [a.id for a in out["TB1"].access] == ["170", "160"]   # inga hopslagningar, nyast först
+    assert not out["TB1"].traffic
+    assert [a.id for a in out["TB3"].access] == ["150"]
+    assert [a.id for a in out["SB"].info] == ["400"]

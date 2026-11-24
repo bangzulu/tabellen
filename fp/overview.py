@@ -13,6 +13,7 @@ Bussarnas läge kommer från bussöversikten (bus.py).
 from __future__ import annotations
 
 from . import config
+from .alerts import is_acute  # noqa: F401 (används här och i tester)
 
 GROUPS = [
     ("Tunnelbana", ["TB1", "TB2", "TB3"]),
@@ -20,14 +21,7 @@ GROUPS = [
     ("Lokalbanor och spårväg", ["RB", "SB", "LB", "TVB", "SpvC"]),
 ]
 RANK = {"major": 2, "minor": 1, "normal": 0}
-ACUTE_MAX_PERIOD_S = 12 * 3600
-ACUTE_NO_END_S = 6 * 3600
 
-
-def is_acute(since: int | None, until: int | None, now: int) -> bool:
-    if since and until:
-        return until - since <= ACUTE_MAX_PERIOD_S
-    return bool(since and now - since <= ACUTE_NO_END_S)
 
 
 def rail_status(n: int, planned: int, late3: int, late5: int, max_delay: float | None,
@@ -56,7 +50,7 @@ def build_overview(rows, alerts: dict, planned_tab: dict, bus: dict | None, now:
         delays = [r.delay_min for r in running if r.delay_min is not None]
         ta = alerts.get(code)
         traffic = ta.traffic if ta else []
-        acute = [a for a in traffic if is_acute(a.since, a.until, now)]
+        acute = [a for a in traffic if a.acute]
         planned_changes = [a for a in traffic if a not in acute]
         trip_alerts = ta.trips if ta else []
         cancelled = sum(1 for r in mine if r.status == "cancelled") + sum(
