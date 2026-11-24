@@ -87,15 +87,8 @@
   }
 
   function brief() {
-    const copy = el("button", { type: "button", class: "bv-copy", text: "Kopiera" });
-    copy.addEventListener("click", async () => {
-      const txt = data.brief.join(" ");
-      try { await navigator.clipboard.writeText(txt); copy.textContent = "Kopierat"; }
-      catch (e) { copy.textContent = "Kunde inte kopiera"; }
-      setTimeout(() => (copy.textContent = "Kopiera"), 2000);
-    });
     return el("section", { class: "bv-brief", "aria-label": "Läget just nu" },
-      el("div", { class: "bv-brief-head" }, el("h2", { text: "Läget just nu" }), copy),
+      el("div", { class: "bv-brief-head" }, el("h2", { text: "Läget just nu" })),
       ...data.brief.map((s) => el("p", { text: s })));
   }
 
