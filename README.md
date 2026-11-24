@@ -203,3 +203,12 @@ tests/              syntetiska tester: python -m pytest
 Filtrering på avvikelser och sortering på försening finns redan. Nästa kandidater:
 ServiceAlerts per linje, trend (ökar förseningen?), markering av tåg som slutat rapportera,
 samt Nockebybanan (linje 12) som saknas i kitt.
+
+## Kurvan "Senaste timmen"
+
+Översiktskorten och bussområdena visar andelen sena (spår: minst 3 min, buss: minst 5 min)
+per 5 minuter senaste timmen. Ett värde sparas per nytt realtidsflöde, alltså bara när någon
+har sidan öppen, så det kostar inga extra anrop mot Trafiklab. Historiken (senaste 2 timmarna)
+sparas i `DATA_DIR/history.json` på Fly-volymen och överlever omstarter (`fp/history.py`).
+Luckor betyder att ingen hade sidan öppen; ensamma värden ritas som prickar.
+

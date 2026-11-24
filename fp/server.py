@@ -154,7 +154,7 @@ def _build_payload(static: StaticData, tu, vp, sa, devs, devs_at) -> dict:
         "alerts_source": "sl-deviations" if devs is not None else "gtfs-rt",
         "max_age_seconds": config.MAX_DATA_AGE_SECONDS,
         "bus_issues": bus_issues,   # antal busområden med förseningar (märke på Buss-fliken)
-        "overview": build_overview(rows, alerts, planned_tab, bus, now),
+        "overview": build_overview(rows, alerts, planned_tab, bus, now, tu.header.timestamp or None),
         "tabs": {
             t["code"]: {
                 # i trafik enligt realtid (inställda räknas inte) och enligt tidtabellen

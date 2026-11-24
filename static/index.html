@@ -335,8 +335,12 @@
   .bv-name { font: inherit; font-weight: 700; color: var(--ink); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
 
   .bv-sparkcell { display: inline-flex; align-items: center; gap: 6px; }
-  .bv-spark path { fill: none; stroke: var(--ink); stroke-width: 1.6; }
-  .bv-spark .ref { stroke: var(--late); stroke-dasharray: 2 2; stroke-width: 1; }
+  .spark { display: block; overflow: visible; }
+  .spark path { fill: none; stroke: var(--ink); stroke-width: 1.6; stroke-linejoin: round; }
+  .spark .pt { fill: var(--ink); }
+  .spark .now { fill: var(--ink); }
+  .spark .ref { stroke: var(--late); stroke-dasharray: 2 2; stroke-width: 1; }
+  .ov-trend { display: flex; align-items: center; gap: 8px; margin-top: 2px; font-size: .78rem; }
   .bv-trend { font-size: .8rem; font-weight: 800; }
   .bv-trend.up { color: var(--very-late); } .bv-trend.down { color: var(--ok); }
   .bv-detail td { background: var(--select-bg); padding: 4px 12px 14px; border-bottom: 2px solid var(--rule); }
@@ -1015,6 +1019,30 @@ const OV_STATUS = {
 };
 const nfSv = new Intl.NumberFormat("sv-SE", { maximumFractionDigits: 1 });
 
+/* Kurva för senaste timmen: andel sena per 5 min. Ensamma värden ritas som prickar,
+   senaste värdet som en fylld prick. ref = streckad referensnivå. */
+function sparkline(values, { w = 64, h = 18, max = 0.6, ref = 0.25, title = "" } = {}) {
+  const NS = "http://www.w3.org/2000/svg";
+  const mk = (tag, attrs) => { const n = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); return n; };
+  if (!values || values.every((v) => v == null)) return el("span", { class: "muted spark-empty", text: "–", title: "Historik saknas ännu" });
+  const y = (v) => h - 2 - Math.min(v, max) / max * (h - 4);
+  const x = (i) => 2 + (i / (values.length - 1)) * (w - 4);
+  const s = mk("svg", { viewBox: `0 0 ${w} ${h}`, width: w, height: h, class: "spark", role: "img", "aria-label": title });
+  if (title) { const t = mk("title", {}); t.textContent = title; s.append(t); }
+  s.append(mk("line", { x1: 0, x2: w, y1: y(ref), y2: y(ref), class: "ref" }));
+  let d = "";
+  values.forEach((v, i) => {
+    if (v == null) return;
+    const prev = values[i - 1], next = values[i + 1];
+    d += `${prev != null ? "L" : "M"}${x(i).toFixed(1)} ${y(v).toFixed(1)}`;
+    if (prev == null && next == null) s.append(mk("circle", { cx: x(i), cy: y(v), r: 1.4, class: "pt" }));
+  });
+  if (d) s.append(mk("path", { d }));
+  const li = values.findLastIndex((v) => v != null);
+  s.append(mk("circle", { cx: x(li), cy: y(values[li]), r: 2.2, class: "now" }));
+  return s;
+}
+
 function ovCard(code, statusText, status, ...body) {
   const card = el("button", { type: "button", class: "ov-card " + status, style: `--c:${TAB_COLOR[code]}`,
                               "aria-label": `${TAB_NAMES[code]}: ${statusText}. Öppna ${TAB_NAMES[code]}.` },
@@ -1039,7 +1067,15 @@ function railCard(m) {
     m.alerts.length ? el("span", { class: "ov-alerts" }, ...m.alerts.map((a) =>
       el("span", { class: "ov-alert" }, a.title, a.until ? el("span", { class: "muted", text: ` · till ${time(a.until)}` }) : null))) : null,
     m.planned_count ? el("span", { class: "ov-planned", title: m.planned_changes.map((x) => x.title).join("\n") },
-      `Planerat: ${m.planned_changes[0].title}` + (m.planned_count > 1 ? ` (+${m.planned_count - 1})` : "")) : null);
+      `Planerat: ${m.planned_changes[0].title}` + (m.planned_count > 1 ? ` (+${m.planned_count - 1})` : "")) : null,
+    ovTrend(m.spark, "minst 3 min sena", 0.2));
+}
+
+function ovTrend(values, what, ref) {
+  if (!values || values.every((v) => v == null)) return null;   // ingen historik ännu
+  return el("span", { class: "ov-trend" },
+    sparkline(values, { w: 120, h: 22, ref, title: `Andel ${what}, senaste timmen (streckat: ${Math.round(ref * 100)} %)` }),
+    el("span", { class: "muted", text: `andel ${what}, senaste timmen` }));
 }
 
 function busCard(b) {
@@ -1050,7 +1086,8 @@ function busCard(b) {
       b.cancelled ? `${b.cancelled} inställda turer` : null].filter(Boolean).join(" · ") }),
     b.areas.length ? el("span", { class: "ov-alerts" }, ...b.areas.map((a) =>
       el("span", { class: "ov-alert " + a.status }, a.name, a.reason ? el("span", { class: "muted", text: ` · ${a.reason}` }) : null))) : null,
-    b.hotspots.length ? el("span", { class: "ov-planned", text: "Flest sena kring " + b.hotspots.join(", ") }) : null);
+    b.hotspots.length ? el("span", { class: "ov-planned", text: "Flest sena kring " + b.hotspots.join(", ") }) : null,
+    ovTrend(b.spark, "minst 5 min sena", 0.25));
 }
 
 function renderOverview() {

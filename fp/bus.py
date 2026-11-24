@@ -18,10 +18,11 @@ import math
 import re
 import statistics
 import time
-from collections import Counter, defaultdict, deque
+from collections import Counter, defaultdict
 
 from google.transit import gtfs_realtime_pb2 as rt
 
+from . import history
 from .alerts import _text
 from .static_gtfs import NO_TIME, StaticData, candidate_service_dates, service_day_start
 
@@ -40,9 +41,6 @@ REASON_NAMES = {
     "personalbrist": "personalbrist", "brist på förare": "personalbrist", "halka": "halka", "väglag": "halka",
 }
 
-# Historik per område för trend (andel minst 5 min sena), sparas vid varje nytt realtidsflöde
-_history: dict[str, deque] = defaultdict(lambda: deque(maxlen=240))
-_last_feed_ts: int | None = None
 
 
 def _reason(text: str) -> str | None:
@@ -108,7 +106,6 @@ def _trip_start(static: StaticData, ti: int, start_date: str, now: int) -> int |
 
 
 def build_bus_overview(static: StaticData, tu, sa, now: int | None = None) -> dict:
-    global _last_feed_ts
     now = int(now or time.time())
     b = static.bus
     areas = b.areas
@@ -229,11 +226,11 @@ def build_bus_overview(static: StaticData, tu, sa, now: int | None = None) -> di
         d10 = sum(1 for d in ds if d >= 10)
         st = status_of(n, d5, d10, delay_alerts, cancelled, net_share5)
         share5 = round(d5 / n, 3) if n else 0
-        hist = _history[name]
-        if _last_feed_ts != tu.header.timestamp and n:
-            hist.append((now, share5))
+        key = "bus:" + name
+        if n:
+            history.record(key, tu.header.timestamp, share5)
         trend = None
-        old = [s for t, s in hist if now - 20 * 60 <= t <= now - 10 * 60]
+        old = history.window(key, now - 20 * 60, now - 10 * 60)
         if old and n:
             trend = round(share5 - statistics.mean(old), 3)
 
@@ -259,7 +256,7 @@ def build_bus_overview(static: StaticData, tu, sa, now: int | None = None) -> di
             "avg": round(statistics.mean(ds), 1) if ds else None,
             "max": round(max(ds), 1) if ds else None,
             "trend": trend,
-            "spark": _spark(hist, now),
+            "spark": history.spark(key, now),
             "cancelled": cancelled, "delay_alerts": delay_alerts,
             "reasons": reasons.most_common(4),
             "trip_alerts": tas[:12],
@@ -308,7 +305,8 @@ def build_bus_overview(static: StaticData, tu, sa, now: int | None = None) -> di
         "cancelled": sum(a["cancelled"] for a in area_out),
         "delay_alerts": sum(a["delay_alerts"] for a in area_out),
     }
-    _last_feed_ts = tu.header.timestamp
+    if n_all:
+        history.record("bus:total", tu.header.timestamp, sum(1 for d in all_d if d >= 5) / n_all)
     return {
         "generated_at": now,
         "feed_timestamp": tu.header.timestamp or None,
@@ -320,15 +318,6 @@ def build_bus_overview(static: StaticData, tu, sa, now: int | None = None) -> di
         "vehicles": vehicles,
     }
 
-
-def _spark(hist: deque, now: int) -> list:
-    """Andel sena senaste timmen, ett värde per 5 min (None där data saknas)."""
-    out = []
-    for k in range(12, 0, -1):
-        lo, hi = now - k * 300, now - (k - 1) * 300
-        vals = [s for t, s in hist if lo < t <= hi]
-        out.append(round(statistics.mean(vals), 3) if vals else None)
-    return out
 
 
 def _pct(x: float) -> str:

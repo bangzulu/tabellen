@@ -12,7 +12,7 @@ Bussarnas läge kommer från bussöversikten (bus.py).
 """
 from __future__ import annotations
 
-from . import config
+from . import config, history
 from .alerts import is_acute  # noqa: F401 (används här och i tester)
 
 GROUPS = [
@@ -41,7 +41,9 @@ def _join(items: list[str]) -> str:
     return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " och " + items[-1]
 
 
-def build_overview(rows, alerts: dict, planned_tab: dict, bus: dict | None, now: int) -> dict:
+def build_overview(rows, alerts: dict, planned_tab: dict, bus: dict | None, now: int,
+                   feed_ts: int | None = None) -> dict:
+    """feed_ts: realtidsflödets tid; ett värde per flöde sparas för kurvan Senaste timmen."""
     modes = []
     for t in config.TABS:
         code = t["code"]
@@ -60,6 +62,9 @@ def build_overview(rows, alerts: dict, planned_tab: dict, bus: dict | None, now:
         max_delay = max(delays) if delays else None
         planned = planned_tab.get(code, 0)
         st = rail_status(len(running), planned, late3, late5, max_delay, cancelled, len(acute))
+        key = "rail:" + code
+        if delays:
+            history.record(key, feed_ts, late3 / len(delays))
         modes.append({
             "code": code, "name": t["name"], "status": st,
             "count": len(running), "planned": planned,
@@ -69,6 +74,8 @@ def build_overview(rows, alerts: dict, planned_tab: dict, bus: dict | None, now:
             "planned_changes": [{"title": a.title, "lines": a.lines} for a in planned_changes[:3]],
             "planned_count": len(planned_changes),
             "trip_alert_count": len(trip_alerts),
+            "share3": round(late3 / len(delays), 3) if delays else None,
+            "spark": history.spark(key, now),
         })
 
     bus_mode = None
@@ -83,6 +90,7 @@ def build_overview(rows, alerts: dict, planned_tab: dict, bus: dict | None, now:
             "areas": [{"name": a["name"], "status": a["status"], "reason": a["reasons"][0][0] if a["reasons"] else None}
                       for a in issues[:5]],
             "hotspots": [h["name"] for h in bus["hotspots"][:3]],
+            "spark": history.spark("bus:total", now),
         }
 
     return {"groups": [{"name": g, "codes": codes} for g, codes in GROUPS],

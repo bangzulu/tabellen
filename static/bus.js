@@ -191,15 +191,7 @@
 
   /* ---------- Områden ---------- */
 
-  function spark(values) {
-    const w = 64, h = 18, pts = values.map((v, i) => (v == null ? null : [(i / (values.length - 1)) * w, h - Math.min(v, 0.6) / 0.6 * (h - 2) - 1]));
-    let d = "", pen = false;
-    for (const p of pts) { if (!p) { pen = false; continue; } d += `${pen ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`; pen = true; }
-    if (!d) return el("span", { class: "muted", text: "–", title: "Historik byggs upp medan sidan är öppen" });
-    return svg("svg", { viewBox: `0 0 ${w} ${h}`, width: w, height: h, class: "bv-spark", "aria-hidden": "true" },
-      svg("line", { x1: 0, x2: w, y1: h - 0.25 / 0.6 * (h - 2) - 1, y2: h - 0.25 / 0.6 * (h - 2) - 1, class: "ref" }),
-      svg("path", { d }));
-  }
+  const spark = (values) => sparkline(values, { title: "Andel minst 5 min sena, senaste timmen (streckat: 25 %)" });
 
   function trendText(t) {
     if (t == null || Math.abs(t) < 0.05) return null;
