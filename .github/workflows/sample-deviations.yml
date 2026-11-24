@@ -1,0 +1,36 @@
+name: Exempel från SL Deviations
+# Hämtar ett exempel på störningsmeddelanden från SL Deviations (ingen nyckel) för analys.
+on:
+  workflow_dispatch:
+  push:
+    paths: [".github/workflows/sample-deviations.yml"]
+jobs:
+  sample:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl -sS --compressed "https://deviations.integration.sl.se/v1/messages?future=false" -o deviations.json
+          python3 - <<'PY'
+          import json, collections
+          d = json.load(open("deviations.json"))
+          print(f"::notice title=Antal::{len(d)} meddelanden")
+          modes = collections.Counter(l.get("transport_mode") for x in d for l in (x.get("scope") or {}).get("lines", []))
+          print(f"::notice title=Trafikslag::{dict(modes)}")
+          keys = collections.Counter(k for x in d for k in x.keys())
+          print(f"::notice title=Fält::{dict(keys)}")
+          pr = collections.Counter((x.get('priority') or {}).get('importance_level') for x in d)
+          print(f"::notice title=importance_level::{dict(pr)}")
+          rail = [x for x in d if any(l.get("transport_mode") in ("METRO","TRAIN","TRAM") for l in (x.get("scope") or {}).get("lines", []))]
+          for x in rail[:12]:
+              mv = (x.get("message_variants") or [{}])[0]
+              lines = [f"{l.get('transport_mode')}:{l.get('designation')}" for l in x["scope"].get("lines", [])][:6]
+              print("::notice title=Spår " + str(x.get("deviation_case_id")) + "::" + json.dumps({"header": mv.get("header"), "scope_alias": mv.get("scope_alias"), "lines": lines,
+                  "stop_areas": len(x["scope"].get("stop_areas", [])), "prio": x.get("priority"), "publish": x.get("publish"), "created": x.get("created"), "categories": x.get("categories")}, ensure_ascii=False))
+          nolines = [x for x in d if not (x.get("scope") or {}).get("lines")]
+          print(f"::notice title=Utan linjer::{len(nolines)} st, t.ex. " + "; ".join(((m.get('message_variants') or [{}])[0].get('header') or '')[:60] for m in nolines[:5]))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deviations
+          path: deviations.json
+          retention-days: 3
